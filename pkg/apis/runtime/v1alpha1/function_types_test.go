@@ -47,12 +47,17 @@ func TestStorageFunction(t *testing.T) {
 	// Test Updating the Labels
 	updated := fetched.DeepCopy()
 	updated.Labels = map[string]string{"hello": "world"}
+	updated.Spec.Size = "L"
+	updated.Spec.Function = "main(){}"
 	g.Expect(c.Update(context.TODO(), updated)).NotTo(gomega.HaveOccurred())
 
 	g.Expect(c.Get(context.TODO(), key, fetched)).NotTo(gomega.HaveOccurred())
 	g.Expect(fetched).To(gomega.Equal(updated))
+	g.Expect(fetched.Spec.Size).To(gomega.Equal("L"))
+	g.Expect(fetched.Spec.Function).To(gomega.Equal(updated.Spec.Function))
 
 	// Test Delete
 	g.Expect(c.Delete(context.TODO(), fetched)).NotTo(gomega.HaveOccurred())
 	g.Expect(c.Get(context.TODO(), key, fetched)).To(gomega.HaveOccurred())
+
 }

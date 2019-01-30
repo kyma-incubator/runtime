@@ -1,12 +1,12 @@
 
 # Image URL to use all building/pushing image targets
-IMG ?= controller:latest
+IMG ?= runtime-controller:latest
 
 all: test manager
 
 # Run tests
 test: generate fmt vet
-	go test ./pkg/... ./cmd/... -coverprofile cover.out
+	go test -v ./pkg/... ./cmd/... -coverprofile cover.out
 
 # Build manager binary
 manager: generate fmt vet
@@ -18,7 +18,15 @@ run: generate fmt vet
 
 # Install CRDs into a cluster
 install:
-	kubectl apply -f config/crds
+	kubectl apply -f config/crds/runtime_v1alpha1_function.yaml
+
+# CreateResource creates a resource in the cluster
+create-resource:
+	kubectl apply -f config/samples
+
+# DeleteResource creates a resource in the cluster
+delete-resource:
+	kubectl delete -f config/samples
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
 # deploy: manifests
@@ -42,7 +50,8 @@ generate:
 	go generate ./pkg/... ./cmd/...
 
 # Build the docker image
-docker-build: test
+# docker-build: test
+docker-build:
 	docker build . -t ${IMG}
 	@echo "updating kustomize image patch file for manager resource"
 	sed -i'' -e 's@image: .*@image: '"${IMG}"'@' ./config/default/manager_image_patch.yaml
