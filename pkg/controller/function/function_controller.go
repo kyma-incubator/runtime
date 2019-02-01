@@ -18,10 +18,14 @@ package function
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"reflect"
+	"strings"
 
+	servingv1alpha1 "github.com/knative/serving/pkg/apis/serving/v1alpha1"
 	runtimev1alpha1 "github.com/kyma-incubator/runtime/pkg/apis/runtime/v1alpha1"
-	appsv1 "k8s.io/api/apps/v1"
+	"github.com/pborman/uuid"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -35,14 +39,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/source"
+
+	runtimeUtil "github.com/kyma-incubator/runtime/pkg/utils"
 )
 
 var log = logf.Log.WithName("controller")
-
-/**
-* USER ACTION REQUIRED: This is a scaffold file intended for the user to modify with their own Controller
-* business logic.  Delete these comments after modifying this file.*
- */
 
 // Add creates a new Function Controller and adds it to the Manager with default RBAC. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -71,13 +72,13 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 	// TODO(user): Modify this to be the types you create
 	// Uncomment watch a Deployment created by Function - change this for objects you create
-	err = c.Watch(&source.Kind{Type: &appsv1.Deployment{}}, &handler.EnqueueRequestForOwner{
-		IsController: true,
-		OwnerType:    &runtimev1alpha1.Function{},
-	})
-	if err != nil {
-		return err
-	}
+	// err = c.Watch(&source.Kind{Type: &corev1.ConfigMap{}}, &handler.EnqueueRequestForOwner{
+	// 	IsController: true,
+	// 	OwnerType:    &runtimev1alpha1.Function{},
+	// })
+	// if err != nil {
+	// 	return err
+	// }
 
 	return nil
 }
@@ -92,17 +93,38 @@ type ReconcileFunction struct {
 
 // Reconcile reads that state of the cluster for a Function object and makes changes based on the state read
 // and what is in the Function.Spec
-// TODO(user): Modify this Reconcile function to implement your Controller logic.  The scaffolding writes
-// a Deployment as an example
-// Automatically generate RBAC rules to allow the Controller to read and write Deployments
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=apps,resources=deployments/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=runtime.kyma-project.io,resources=functions,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=runtime.kyma-project.io,resources=functions/status,verbs=get;update;patch
 func (r *ReconcileFunction) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+
+	fnConfigName := "fn-config"
+	fnConfigNamespace := "default"
+	fnConfigNameEnv := os.Getenv("CONTROLLER_CONFIGMAP")
+	fnConfigNamespaceEnv := os.Getenv("CONTROLLER_CONFIGMAP_NS")
+	if len(fnConfigNameEnv) > 0 {
+		fnConfigName = fnConfigNameEnv
+	}
+	if len(fnConfigNamespaceEnv) > 0 {
+		fnConfigNamespace = fnConfigNamespaceEnv
+	}
+	fnConfig := &corev1.ConfigMap{}
+	err := r.Get(context.TODO(), types.NamespacedName{Name: fnConfigName, Namespace: fnConfigNamespace}, fnConfig)
+
+	if err != nil {
+		log.Info("Unable to read Function controller config: %v from Namespace: %v", fnConfigName, fnConfigNamespace)
+		return reconcile.Result{}, err
+	}
+
+	rnInfo, err := runtimeUtil.New(fnConfig)
+	if err != nil {
+		fmt.Printf("Error in reading ConfigMap: %v", err)
+		return reconcile.Result{}, err
+	}
 	// Fetch the Function instance
-	instance := &runtimev1alpha1.Function{}
-	err := r.Get(context.TODO(), request.NamespacedName, instance)
+	fn := &runtimev1alpha1.Function{}
+	err = r.Get(context.TODO(), request.NamespacedName, fn)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Object not found, return.  Created objects are automatically garbage collected.
@@ -112,42 +134,33 @@ func (r *ReconcileFunction) Reconcile(request reconcile.Request) (reconcile.Resu
 		// Error reading the object - requeue the request.
 		return reconcile.Result{}, err
 	}
-
-	// TODO(user): Change this to be the object type created by your controller
-	// Define the desired Deployment object
-	deploy := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      instance.Name + "-deployment",
-			Namespace: instance.Namespace,
-		},
-		Spec: appsv1.DeploymentSpec{
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{"deployment": instance.Name + "-deployment"},
-			},
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"deployment": instance.Name + "-deployment"}},
-				Spec: corev1.PodSpec{
-					Containers: []corev1.Container{
-						{
-							Name:  "nginx",
-							Image: "nginx",
-						},
-					},
-				},
-			},
-		},
+	data := make(map[string]string)
+	data["handler"] = "handler.main"
+	data["handler.js"] = fn.Spec.Function
+	if len(strings.Trim(fn.Spec.Deps, " ")) == 0 {
+		data["package.json"] = "{}"
+	} else {
+		data["package.json"] = fn.Spec.Deps
 	}
-	if err := controllerutil.SetControllerReference(instance, deploy, r.scheme); err != nil {
+
+	// Managing a ConfigMap
+	deployCm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Labels:    fn.Labels,
+			Namespace: fn.Namespace,
+			Name:      fn.Name,
+		},
+		Data: data,
+	}
+	if err := controllerutil.SetControllerReference(fn, deployCm, r.scheme); err != nil {
 		return reconcile.Result{}, err
 	}
 
-	// TODO(user): Change this for the object type created by your controller
-	// Check if the Deployment already exists
-	found := &appsv1.Deployment{}
-	err = r.Get(context.TODO(), types.NamespacedName{Name: deploy.Name, Namespace: deploy.Namespace}, found)
+	foundCm := &corev1.ConfigMap{}
+	err = r.Get(context.TODO(), types.NamespacedName{Name: deployCm.Name, Namespace: deployCm.Namespace}, foundCm)
 	if err != nil && errors.IsNotFound(err) {
-		log.Info("Creating Deployment", "namespace", deploy.Namespace, "name", deploy.Name)
-		err = r.Create(context.TODO(), deploy)
+		log.Info("Creating ConfigMap", "namespace", deployCm.Namespace, "name", deployCm.Name)
+		err = r.Create(context.TODO(), deployCm)
 		if err != nil {
 			return reconcile.Result{}, err
 		}
@@ -155,15 +168,54 @@ func (r *ReconcileFunction) Reconcile(request reconcile.Request) (reconcile.Resu
 		return reconcile.Result{}, err
 	}
 
-	// TODO(user): Change this for the object type created by your controller
-	// Update the found object and write the result back if there are any changes
-	if !reflect.DeepEqual(deploy.Spec, found.Spec) {
-		found.Spec = deploy.Spec
-		log.Info("Updating Deployment", "namespace", deploy.Namespace, "name", deploy.Name)
-		err = r.Update(context.TODO(), found)
+	if !reflect.DeepEqual(deployCm.Data, foundCm.Data) {
+		foundCm.Data = deployCm.Data
+		log.Info("Updating ConfigMap", "namespace", deployCm.Namespace, "name", deployCm.Name)
+		err = r.Update(context.TODO(), foundCm)
 		if err != nil {
 			return reconcile.Result{}, err
 		}
 	}
+
+	// Managing a resource of type Service.serving.knative.dev
+
+	dockerRegistry := rnInfo.RegistryInfo
+	randomStr := uuid.NewRandom().String()[:8]
+	imageName := fmt.Sprintf("%s/%s-%s:%s", dockerRegistry, fn.Namespace, fn.Name, randomStr)
+	deployService := &servingv1alpha1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Labels:    fn.Labels,
+			Namespace: fn.Namespace,
+			Name:      fn.Name,
+		},
+		Spec: runtimeUtil.GetServiceSpec(imageName, *fn, rnInfo),
+	}
+
+	if err := controllerutil.SetControllerReference(fn, deployService, r.scheme); err != nil {
+		return reconcile.Result{}, err
+	}
+
+	foundService := &servingv1alpha1.Service{}
+	err = r.Get(context.TODO(), types.NamespacedName{Name: deployService.Name, Namespace: deployService.Namespace}, foundService)
+	if err != nil && errors.IsNotFound(err) {
+		log.Info("Creating Service", "namespace", deployService.Namespace, "name", deployService.Name)
+		err = r.Create(context.TODO(), deployService)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+	} else if err != nil {
+		fmt.Printf("Error while creating: %v", err)
+		return reconcile.Result{}, err
+	}
+	if !reflect.DeepEqual(deployService.Spec, deployService.Spec) {
+		foundService.Spec = deployService.Spec
+		log.Info("Updating Service", "namespace", deployService.Namespace, "name", deployService.Name)
+		err = r.Update(context.TODO(), foundService)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+	}
+
 	return reconcile.Result{}, nil
+
 }

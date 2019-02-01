@@ -2,13 +2,15 @@ apiVersion: runtime.kyma-project.io/v1alpha1
 kind: Function
 metadata:
   name: sample
+  labels:
+    foo: bar
 spec:
   function: |
     module.exports = {
-        hello: function(event, context) {
+        main: function(event, context) {
           return 'Hello World'
         }
       }
   functionContentType: "plaintext"
   size: "L"
-  runtime: "nodejs6"
+  runtime: "nodejs8"

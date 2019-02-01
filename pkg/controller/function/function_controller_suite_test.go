@@ -23,6 +23,7 @@ import (
 	"sync"
 	"testing"
 
+	servingv1alpha1 "github.com/knative/serving/pkg/apis/serving/v1alpha1"
 	"github.com/kyma-incubator/runtime/pkg/apis"
 	"github.com/onsi/gomega"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -36,9 +37,12 @@ var cfg *rest.Config
 
 func TestMain(m *testing.M) {
 	t := &envtest.Environment{
+		Config:            cfg,
 		CRDDirectoryPaths: []string{filepath.Join("..", "..", "..", "config", "crds")},
 	}
 	apis.AddToScheme(scheme.Scheme)
+
+	servingv1alpha1.SchemeBuilder.AddToScheme(scheme.Scheme)
 
 	var err error
 	if cfg, err = t.Start(); err != nil {
@@ -53,7 +57,9 @@ func TestMain(m *testing.M) {
 // SetupTestReconcile returns a reconcile.Reconcile implementation that delegates to inner and
 // writes the request to requests after Reconcile is finished.
 func SetupTestReconcile(inner reconcile.Reconciler) (reconcile.Reconciler, chan reconcile.Request) {
+
 	requests := make(chan reconcile.Request)
+
 	fn := reconcile.Func(func(req reconcile.Request) (reconcile.Result, error) {
 		result, err := inner.Reconcile(req)
 		requests <- req

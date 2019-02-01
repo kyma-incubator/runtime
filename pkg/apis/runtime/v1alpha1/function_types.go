@@ -26,7 +26,7 @@ type FunctionSpec struct {
 	// function defines the content of a function
 	Function string `json:"function"`
 
-	// functionContentType defines file content type (plain text, base64 or zip)
+	// functionContentType defines file content type (plaintext or base64)
 	FunctionContentType string `json:"functionContentType"`
 
 	// size defines as the size of a function pertaining to memory and cpu only. Values can be any one of these S, M, L, XL
