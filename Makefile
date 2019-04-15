@@ -1,6 +1,6 @@
 
 # Image URL to use all building/pushing image targets
-IMG ?= runtime-controller:latest
+IMG ?= shazra/runtime-controller:latest
 
 all: test manager
 

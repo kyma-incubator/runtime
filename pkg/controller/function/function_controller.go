@@ -25,7 +25,6 @@ import (
 
 	servingv1alpha1 "github.com/knative/serving/pkg/apis/serving/v1alpha1"
 	runtimev1alpha1 "github.com/kyma-incubator/runtime/pkg/apis/runtime/v1alpha1"
-	"github.com/pborman/uuid"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -180,7 +179,8 @@ func (r *ReconcileFunction) Reconcile(request reconcile.Request) (reconcile.Resu
 	// Managing a resource of type Service.serving.knative.dev
 
 	dockerRegistry := rnInfo.RegistryInfo
-	randomStr := uuid.NewRandom().String()[:8]
+	// randomStr := uuid.NewRandom().String()[:8]
+	randomStr := "latest"
 	imageName := fmt.Sprintf("%s/%s-%s:%s", dockerRegistry, fn.Namespace, fn.Name, randomStr)
 	deployService := &servingv1alpha1.Service{
 		ObjectMeta: metav1.ObjectMeta{

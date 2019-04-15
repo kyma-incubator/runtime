@@ -15,6 +15,6 @@ spec:
       serviceAccount: runtime-controller
       containers:
       # Change the value of image field below to your controller image URL
-      - image: runtime-controller:latest
+      - image: shazra/runtime-controller:latest
         imagePullPolicy: IfNotPresent
         name: manager-role
