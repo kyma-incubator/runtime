@@ -207,7 +207,7 @@ func (r *ReconcileFunction) Reconcile(request reconcile.Request) (reconcile.Resu
 		fmt.Printf("Error while creating: %v", err)
 		return reconcile.Result{}, err
 	}
-	if !reflect.DeepEqual(deployService.Spec, deployService.Spec) {
+	if !reflect.DeepEqual(deployService.Spec, foundService.Spec) {
 		foundService.Spec = deployService.Spec
 		log.Info("Updating Service", "namespace", deployService.Namespace, "name", deployService.Name)
 		err = r.Update(context.TODO(), foundService)

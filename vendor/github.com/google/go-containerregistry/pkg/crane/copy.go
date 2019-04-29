@@ -16,24 +16,24 @@ package crane
 
 import (
 	"log"
-
 	"net/http"
-
-	"github.com/google/go-containerregistry/pkg/v1/remote"
 
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
+	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/spf13/cobra"
 )
 
 func init() { Root.AddCommand(NewCmdCopy()) }
 
+// NewCmdCopy creates a new cobra.Command for the copy subcommand.
 func NewCmdCopy() *cobra.Command {
 	return &cobra.Command{
-		Use:   "copy",
-		Short: "Efficiently copy a remote image from src to dst",
-		Args:  cobra.ExactArgs(2),
-		Run:   doCopy,
+		Use:     "copy",
+		Aliases: []string{"cp"},
+		Short:   "Efficiently copy a remote image from src to dst",
+		Args:    cobra.ExactArgs(2),
+		Run:     doCopy,
 	}
 }
 
@@ -61,8 +61,7 @@ func doCopy(_ *cobra.Command, args []string) {
 		log.Fatalf("getting creds for %q: %v", dstRef, err)
 	}
 
-	wo := remote.WriteOptions{}
-	if err := remote.Write(dstRef, img, dstAuth, http.DefaultTransport, wo); err != nil {
+	if err := remote.Write(dstRef, img, dstAuth, http.DefaultTransport); err != nil {
 		log.Fatalf("writing image %q: %v", dstRef, err)
 	}
 }

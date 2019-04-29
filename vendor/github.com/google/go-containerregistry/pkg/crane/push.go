@@ -18,16 +18,16 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/spf13/cobra"
-
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
+	"github.com/spf13/cobra"
 )
 
 func init() { Root.AddCommand(NewCmdPush()) }
 
+// NewCmdPush creates a new cobra.Command for the push subcommand.
 func NewCmdPush() *cobra.Command {
 	return &cobra.Command{
 		Use:   "push",
@@ -55,7 +55,7 @@ func push(_ *cobra.Command, args []string) {
 		log.Fatalf("reading image %q: %v", src, err)
 	}
 
-	if err := remote.Write(t, i, auth, http.DefaultTransport, remote.WriteOptions{}); err != nil {
+	if err := remote.Write(t, i, auth, http.DefaultTransport); err != nil {
 		log.Fatalf("writing image %q: %v", t, err)
 	}
 }

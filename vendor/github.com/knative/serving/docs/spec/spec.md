@@ -50,6 +50,9 @@ metadata:
   namespace: default
   labels:
     knative.dev/service: ...  # name of the Service automatically filled in
+  annotations:
+    serving.knative.dev/creator: ...       # the user identity who created the service, system generated.
+    serving.knative.dev/lastModifier: ...  # the user identity who last modified the service, system generated.
 
   # system generated meta
   uid: ...
@@ -89,6 +92,7 @@ status:
   - revisionName: ...  # latestReadyRevisionName from a configurationName in spec
     name: ...
     percent: ...  # percentages add to 100. 0 is a valid list value
+    url: ... # present when name is set. URL of the named traffic target
   - ...
 
   conditions:  # See also the [error conditions documentation](errors.md)
@@ -138,8 +142,6 @@ spec:
 
   revisionTemplate:  # template for building Revision
     metadata: ...
-      labels:
-        knative.dev/type: "function"  # One of "function" or "app"
     spec:  # knative.RevisionTemplateSpec. Copied to a new revision
 
       # +optional. DEPRECATED, use buildRef
@@ -154,6 +156,14 @@ spec:
 
       # is a core.v1.Container; some fields not allowed, such as resources, ports
       container: ... # See the Container section below
+
+      # is a heavily restricted []core.v1.Volume; only the secret and configMap
+      # types are allowed.
+      volumes:
+      - name: foo
+        secret: ...
+      - name: bar
+        configMap: ...
 
       # +optional concurrency strategy.  Defaults to Multi.
       # Deprecated in favor of ContainerConcurrency.
@@ -217,6 +227,14 @@ spec:
 
   container: ... # See the Container section below
 
+  # is a heavily restricted []core.v1.Volume; only the secret and configMap
+  # types are allowed.
+  volumes:
+  - name: foo
+    secret: ...
+  - name: bar
+    configMap: ...
+
   # Name of the service account the code should run as.
   serviceAccountName: ...
 
@@ -236,7 +254,6 @@ spec:
   # Deprecated in favor of containerConcurrency
   concurrencyModel: Single | Multi
 
-  # NYI: https://github.com/knative/serving/issues/457
   # Many higher-level systems impose a per-request response deadline.
   timeoutSeconds: ...
 
@@ -282,8 +299,6 @@ kind: Service
 metadata:
   name: myservice
   namespace: default
-  labels:
-    knative.dev/type: "function"  # convention, one of "function" or "app"
   # system generated meta
   uid: ...
   resourceVersion: ...  # used for optimistic concurrency control
@@ -303,8 +318,9 @@ spec:  # One of "runLatest", "release", "pinned" (DEPRECATED), or "manual"
       revisionTemplate:
         spec: # serving.knative.dev/v1alpha1.RevisionSpec
           container: ... # See the Container section below
+          volumes: ... # Optional
           containerConcurrency: ... # Optional
-          timeoutSeconds: ...
+          timeoutSeconds: ... # Optional
           serviceAccountName: ...  # Name of the service account the code should run as
 
   # Example, only one of "runLatest", "release", "pinned" (DEPRECATED), or "manual" can be set in practice.
@@ -316,14 +332,16 @@ spec:  # One of "runLatest", "release", "pinned" (DEPRECATED), or "manual"
       revisionTemplate:
         spec: # serving.knative.dev/v1alpha1.RevisionSpec
           container: ... # See the Container section below
+          volumes: ... # Optional
           containerConcurrency: ... # Optional
-          timeoutSeconds: ...
+          timeoutSeconds: ... # Optional
           serviceAccountName: ...  # Name of the service account the code should run as
 
   # Example, only one of "runLatest", "release", "pinned" (DEPRECATED), or "manual" can be set in practice.
   release:
     # Ordered list of 1 or 2 revisions. First revision is traffic target
     # "current" and second revision is traffic target "candidate".
+    # It is possible to specify `"@latest"` string as a shortcut to the lastest available revision.
     revisions: ["myservice-00013", "myservice-00015"]
     rolloutPercent: 50 # Percent [0-99] of traffic to route to "candidate" revision
     configuration:  # serving.knative.dev/v1alpha1.ConfigurationSpec
@@ -332,8 +350,9 @@ spec:  # One of "runLatest", "release", "pinned" (DEPRECATED), or "manual"
       revisionTemplate:
         spec: # serving.knative.dev/v1alpha1.RevisionSpec
           container: ... # See the Container section below
+          volumes: ... # Optional
           containerConcurrency: ... # Optional
-          timeoutSeconds: ...
+          timeoutSeconds: ... # Optional
           serviceAccountName: ...  # Name of the service account the code should run as
 
   # Example, only one of "runLatest", "release", "pinned" (DEPRECATED), or "manual" can be set in practice.
@@ -367,6 +386,7 @@ status:
   - revisionName: ...  # latestReadyRevisionName from a configurationName in spec
     name: ...
     percent: ...  # percentages add to 100. 0 is a valid list value
+    url: ... # present when name is set. URL of the named traffic target
   - ...
 
   conditions:  # See also the documentation in errors.md
@@ -389,43 +409,74 @@ status:
 ## Container
 
 This is a
-[core.v1.Container](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.10/#container-v1-core).
-Some fields are not allowed, such as name and volumeMounts.
+[core.v1.Container](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.11/#container-v1-core).
+Fields not specified in the container object below are disallowed. Examples of
+disallowed fields include `name` and `lifecycle`.
 
 This type is not used on its own but is found composed inside
 [Service](#service), [Configuration](#configuration), and [Revision](#revision).
 
+Items with `...` behave as specified in the Kubernetes API documentation unless
+otherwise noted.
+
 ```yaml
 container: # v1.Container
-  # image either provided as pre-built container, or built by Knative Serving from
-  # source. When built by knative, set to the same as build template, e.g.
+  args: [...] # Optional
+  command: [...] # Optional
+  env: ... # Optional
+  envFrom: ... # Optional
+
+  # image is either provided as pre-built container, or built by Knative Serving from
+  # source. When built by Knative, this should match what the Build is directed to produce, e.g.
   # build.template.arguments[_IMAGE], as the "promise" of a future build.
   # If buildRef is provided, it is expected that this image will be
   # present when the referenced build is complete.
-  image: gcr.io/...
-  command: ["run"]
-  args: []
-  env:
-    # list of environment vars
-    - name: FOO
-      value: bar
-    - name: HELLO
-      value: world
-    - ...
+  image: gcr.io/... # Required
+  imagePullPolicy: ... # Optional
 
-  # Optional, only a single containerPort may be specified.
+  # HTTPGetAction and TCPSocketAction are the supported probe options.
+  livenessProbe: # Optional
+    failureThreshold: ...
+    httpGet: ...
+    initialDelaySeconds: ...
+    periodSeconds: ...
+    successThreshold: ...
+    tcpSocket: ...
+    timeoutSeconds: ...
+
+  # Only a single containerPort may be specified.
   # This can be specified to select a specific port for incoming traffic.
   # This is useful if your application cannot discover the port to listen
   # on through the $PORT environment variable that is always set within the container.
   # Some fields are not allowed, such as hostIP and hostPort.
-  ports: # core.v1.ContainerPort array
+  ports: # Optional
     # Valid range is [1-65535], except 8012 (RequestQueuePort)
     # and 8022 (RequestQueueAdminPort).
     - containerPort: ...
       name: ... # Optional, one of "http1", "h2c"
       protocol: ... # Optional, one of "", "tcp"
 
-  livenessProbe: ... # Optional
+  # HTTPGetAction and TCPSocketAction are the supported probe options.
   readinessProbe: ... # Optional
+    failureThreshold: ...
+    httpGet: ...
+    initialDelaySeconds: ...
+    periodSeconds: ...
+    successThreshold: ...
+    tcpSocket: ...
+    timeoutSeconds: ...
+
   resources: ... # Optional
+  securityContext: ... # Optional
+  terminationMessagePath: ... # Optional
+  terminationMessagePolicy: ... # Optional
+
+  # This specifies where the volumes present in the RevisionSpec will be mounted into
+  # the container.  Each of the volumes in the RevisionSpec must be mounted here
+  # or it is an error.
+  volumeMounts: # Optional
+    - name: ... # This must match a name from Volumes
+      mountPath: ... # Where to mount the named Volume.
+      readOnly: ... # Must be True, will default to True, so it may be omitted.
+  workingDir: ... # Optional
 ```

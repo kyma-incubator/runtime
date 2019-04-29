@@ -15,8 +15,6 @@
 package gcrane
 
 import (
-	"net/http"
-
 	"fmt"
 	"log"
 
@@ -28,28 +26,47 @@ import (
 
 func init() { Root.AddCommand(NewCmdGc()) }
 
+// NewCmdGc creates a new cobra.Command for the gc subcommand.
 func NewCmdGc() *cobra.Command {
-	return &cobra.Command{
+	recursive := false
+	cmd := &cobra.Command{
 		Use:   "gc",
 		Short: "List images that are not tagged",
 		Args:  cobra.ExactArgs(1),
-		Run:   gc,
+		Run: func(_ *cobra.Command, args []string) {
+			gc(args[0], recursive)
+		},
+	}
+
+	cmd.Flags().BoolVarP(&recursive, "recursive", "r", false, "Whether to recurse through repos")
+
+	return cmd
+}
+
+func gc(root string, recursive bool) {
+	repo, err := name.NewRepository(root, name.WeakValidation)
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	auth := google.WithAuthFromKeychain(authn.DefaultKeychain)
+
+	if recursive {
+		if err := google.Walk(repo, printUntaggedImages, auth); err != nil {
+			log.Fatalln(err)
+		}
+		return
+	}
+
+	tags, err := google.List(repo, auth)
+	if err := printUntaggedImages(repo, tags, err); err != nil {
+		log.Fatalln(err)
 	}
 }
 
-func gc(_ *cobra.Command, args []string) {
-	r := args[0]
-	repo, err := name.NewRepository(r, name.WeakValidation)
+func printUntaggedImages(repo name.Repository, tags *google.Tags, err error) error {
 	if err != nil {
-		log.Fatalln(err)
-	}
-	auth, err := authn.DefaultKeychain.Resolve(repo.Registry)
-	if err != nil {
-		log.Fatalln(err)
-	}
-	tags, err := google.List(repo, auth, http.DefaultTransport)
-	if err != nil {
-		log.Fatalln(err)
+		return err
 	}
 
 	for digest, manifest := range tags.Manifests {
@@ -57,4 +74,6 @@ func gc(_ *cobra.Command, args []string) {
 			fmt.Printf("%s@%s\n", repo, digest)
 		}
 	}
+
+	return nil
 }

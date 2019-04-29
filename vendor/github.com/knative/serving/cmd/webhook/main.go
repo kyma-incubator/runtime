@@ -17,27 +17,36 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"flag"
 	"log"
+
+	"k8s.io/client-go/tools/clientcmd"
 
 	"go.uber.org/zap"
 
 	"github.com/knative/pkg/configmap"
 	"github.com/knative/pkg/logging/logkey"
 	"github.com/knative/pkg/signals"
+	"github.com/knative/pkg/system"
+	"github.com/knative/pkg/version"
 	"github.com/knative/pkg/webhook"
 	kpa "github.com/knative/serving/pkg/apis/autoscaling/v1alpha1"
+	apiconfig "github.com/knative/serving/pkg/apis/config"
 	net "github.com/knative/serving/pkg/apis/networking/v1alpha1"
 	"github.com/knative/serving/pkg/apis/serving/v1alpha1"
 	"github.com/knative/serving/pkg/logging"
-	"github.com/knative/serving/pkg/system"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
 )
 
 const (
 	component = "webhook"
+)
+
+var (
+	masterURL  = flag.String("master", "", "The address of the Kubernetes API server. Overrides any value in kubeconfig. Only required if out-of-cluster.")
+	kubeconfig = flag.String("kubeconfig", "", "Path to a kubeconfig. Only required if out-of-cluster.")
 )
 
 func main() {
@@ -52,34 +61,42 @@ func main() {
 	}
 	logger, atomicLevel := logging.NewLoggerFromConfig(config, component)
 	defer logger.Sync()
-	logger = logger.With(zap.String(logkey.ControllerType, "webhook"))
+	logger = logger.With(zap.String(logkey.ControllerType, component))
 
 	logger.Info("Starting the Configuration Webhook")
 
-	// set up signals so we handle the first shutdown signal gracefully
+	// Set up signals so we handle the first shutdown signal gracefully.
 	stopCh := signals.SetupSignalHandler()
 
-	clusterConfig, err := rest.InClusterConfig()
+	clusterConfig, err := clientcmd.BuildConfigFromFlags(*masterURL, *kubeconfig)
 	if err != nil {
-		logger.Fatal("Failed to get in cluster config", zap.Error(err))
+		logger.Fatalw("Failed to get cluster config", zap.Error(err))
 	}
 
 	kubeClient, err := kubernetes.NewForConfig(clusterConfig)
 	if err != nil {
-		logger.Fatal("Failed to get the client set", zap.Error(err))
+		logger.Fatalw("Failed to get the client set", zap.Error(err))
+	}
+
+	if err := version.CheckMinimumVersion(kubeClient.Discovery()); err != nil {
+		logger.Fatalf("Version check failed: %v", err)
 	}
 
 	// Watch the logging config map and dynamically update logging levels.
-	configMapWatcher := configmap.NewInformedWatcher(kubeClient, system.Namespace)
-	configMapWatcher.Watch(logging.ConfigName, logging.UpdateLevelFromConfigMap(logger, atomicLevel, component))
+	configMapWatcher := configmap.NewInformedWatcher(kubeClient, system.Namespace())
+	configMapWatcher.Watch(logging.ConfigMapName(), logging.UpdateLevelFromConfigMap(logger, atomicLevel, component))
+
+	store := apiconfig.NewStore(logger.Named("config-store"))
+	store.WatchConfigs(configMapWatcher)
+
 	if err = configMapWatcher.Start(stopCh); err != nil {
-		logger.Fatalf("failed to start configuration manager: %v", err)
+		logger.Fatalw("Failed to start the ConfigMap watcher", zap.Error(err))
 	}
 
 	options := webhook.ControllerOptions{
 		ServiceName:    "webhook",
 		DeploymentName: "webhook",
-		Namespace:      system.Namespace,
+		Namespace:      system.Namespace(),
 		Port:           443,
 		SecretName:     "webhook-certs",
 		WebhookName:    "webhook.serving.knative.dev",
@@ -93,12 +110,19 @@ func main() {
 			v1alpha1.SchemeGroupVersion.WithKind("Route"):         &v1alpha1.Route{},
 			v1alpha1.SchemeGroupVersion.WithKind("Service"):       &v1alpha1.Service{},
 			kpa.SchemeGroupVersion.WithKind("PodAutoscaler"):      &kpa.PodAutoscaler{},
+			net.SchemeGroupVersion.WithKind("Certificate"):        &net.Certificate{},
 			net.SchemeGroupVersion.WithKind("ClusterIngress"):     &net.ClusterIngress{},
+			net.SchemeGroupVersion.WithKind("ServerlessService"):  &net.ServerlessService{},
 		},
-		Logger: logger,
+		Logger:                logger,
+		DisallowUnknownFields: true,
+
+		// Decorate contexts with the current state of the config.
+		WithContext: func(ctx context.Context) context.Context {
+			return store.ToContext(ctx)
+		},
 	}
-	if err != nil {
-		logger.Fatal("Failed to create the admission controller", zap.Error(err))
+	if err = controller.Run(stopCh); err != nil {
+		logger.Fatalw("Failed to start the admission controller", zap.Error(err))
 	}
-	controller.Run(stopCh)
 }

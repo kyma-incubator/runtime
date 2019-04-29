@@ -16,6 +16,9 @@ apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
 metadata:
   name: clusteringresses.networking.internal.knative.dev
+  labels:
+    serving.knative.dev/release: devel
+    knative.dev/crd-install: "true"
 spec:
   group: networking.internal.knative.dev
   version: v1alpha1
@@ -33,7 +36,7 @@ spec:
   additionalPrinterColumns:
   - name: Ready
     type: string
-    JSONPath: ".status.conditions[?(@.type==\"Ready\")].status"
+    JSONPath: ".status.conditions[?(@.type=='Ready')].status"
   - name: Reason
     type: string
-    JSONPath: ".status.conditions[?(@.type==\"Ready\")].reason"
+    JSONPath: ".status.conditions[?(@.type=='Ready')].reason"

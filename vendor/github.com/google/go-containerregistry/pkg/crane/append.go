@@ -18,17 +18,17 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/spf13/cobra"
-
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
+	"github.com/spf13/cobra"
 )
 
 func init() { Root.AddCommand(NewCmdAppend()) }
 
+// NewCmdAppend creates a new cobra.Command for the append subcommand.
 func NewCmdAppend() *cobra.Command {
 	var baseRef, newTag, newLayer, outFile string
 	appendCmd := &cobra.Command{
@@ -76,7 +76,7 @@ func doAppend(src, dst, tar, output string) {
 	}
 
 	if output != "" {
-		if err := tarball.WriteToFile(output, dstTag, image, &tarball.WriteOptions{}); err != nil {
+		if err := tarball.WriteToFile(output, dstTag, image); err != nil {
 			log.Fatalf("writing output %q: %v", output, err)
 		}
 		return
@@ -87,8 +87,7 @@ func doAppend(src, dst, tar, output string) {
 		log.Fatalf("getting creds for %q: %v", dstTag, err)
 	}
 
-	opts := remote.WriteOptions{}
-	if err := remote.Write(dstTag, image, dstAuth, http.DefaultTransport, opts); err != nil {
+	if err := remote.Write(dstTag, image, dstAuth, http.DefaultTransport); err != nil {
 		log.Fatalf("writing image %q: %v", dstTag, err)
 	}
 }

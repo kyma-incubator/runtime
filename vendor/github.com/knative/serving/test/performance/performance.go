@@ -1,5 +1,3 @@
-// +build performance
-
 /*
 Copyright 2018 The Knative Authors
 
@@ -19,15 +17,14 @@ limitations under the License.
 package performance
 
 import (
-	"context"
 	"fmt"
 	"time"
 
 	pkgTest "github.com/knative/pkg/test"
 	"github.com/knative/pkg/test/logging"
 	"github.com/knative/serving/test"
+	"github.com/knative/test-infra/shared/junit"
 	"github.com/knative/test-infra/shared/prometheus"
-	"github.com/knative/test-infra/shared/testgrid"
 
 	// Mysteriously required to support GCP auth (required by k8s libs). Apparently just importing it is enough. @_@ side effects @_@. https://github.com/kubernetes/client-go/issues/242
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
@@ -42,13 +39,14 @@ const (
 	duration    = 1 * time.Minute
 )
 
-type PerformanceClient struct {
+// Client is the client used in the performance tests.
+type Client struct {
 	E2EClients *test.Clients
 	PromClient *prometheus.PromProxy
 }
 
 // Setup creates all the clients that we need to interact with in our tests
-func Setup(ctx context.Context, logger *logging.BaseLogger, promReqd bool) (*PerformanceClient, error) {
+func Setup(logf logging.FormatLogger, promReqd bool) (*Client, error) {
 	clients, err := test.NewClients(pkgTest.Flags.Kubeconfig, pkgTest.Flags.Cluster, test.ServingNamespace)
 	if err != nil {
 		return nil, err
@@ -56,30 +54,28 @@ func Setup(ctx context.Context, logger *logging.BaseLogger, promReqd bool) (*Per
 
 	var p *prometheus.PromProxy
 	if promReqd {
-		logger.Infof("Creating prometheus proxy client")
+		logf("Creating prometheus proxy client")
 		p = &prometheus.PromProxy{Namespace: monitoringNS}
-		p.Setup(ctx, logger)
+		p.Setup(clients.KubeClient.Kube, logf)
 	}
-	return &PerformanceClient{E2EClients: clients, PromClient: p}, nil
+	return &Client{E2EClients: clients, PromClient: p}, nil
 }
 
-// Teardown cleans up resources used
-func TearDown(client *PerformanceClient, logger *logging.BaseLogger, names test.ResourceNames) {
-	if client.E2EClients != nil && client.E2EClients.ServingClient != nil {
-		client.E2EClients.ServingClient.Delete([]string{names.Route}, []string{names.Config}, []string{names.Service})
-	}
+// TearDown cleans up resources used
+func TearDown(client *Client, names test.ResourceNames, logf logging.FormatLogger) {
+	test.TearDown(client.E2EClients, names)
 
 	if client.PromClient != nil {
-		client.PromClient.Teardown(logger)
+		client.PromClient.Teardown(logf)
 	}
 }
 
 // CreatePerfTestCase creates a perf test case with the provided name and value
-func CreatePerfTestCase(metricValue float32, metricName, testName string) testgrid.TestCase {
-	tp := []testgrid.TestProperty{{Name: perfLatency, Value: metricValue}}
-	tc := testgrid.TestCase{
+func CreatePerfTestCase(metricValue float32, metricName, testName string) junit.TestCase {
+	tp := []junit.TestProperty{{Name: perfLatency, Value: fmt.Sprintf("%f", metricValue)}}
+	tc := junit.TestCase{
 		ClassName:  testName,
 		Name:       fmt.Sprintf("%s/%s", testName, metricName),
-		Properties: testgrid.TestProperties{Property: tp}}
+		Properties: junit.TestProperties{Properties: tp}}
 	return tc
 }

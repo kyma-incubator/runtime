@@ -22,6 +22,7 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/knative/pkg/controller"
 	"github.com/knative/pkg/kmp"
 	"github.com/knative/pkg/logging"
@@ -37,6 +38,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/cache"
 )
 
@@ -77,28 +79,16 @@ func NewController(
 	impl := controller.NewImpl(c, c.Logger, ReconcilerName, reconciler.MustNewStatsReporter(ReconcilerName, c.Logger))
 
 	c.Logger.Info("Setting up event handlers")
-	serviceInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    impl.Enqueue,
-		UpdateFunc: controller.PassNew(impl.Enqueue),
-		DeleteFunc: impl.Enqueue,
-	})
+	serviceInformer.Informer().AddEventHandler(reconciler.Handler(impl.Enqueue))
 
 	configurationInformer.Informer().AddEventHandler(cache.FilteringResourceEventHandler{
 		FilterFunc: controller.Filter(v1alpha1.SchemeGroupVersion.WithKind("Service")),
-		Handler: cache.ResourceEventHandlerFuncs{
-			AddFunc:    impl.EnqueueControllerOf,
-			UpdateFunc: controller.PassNew(impl.EnqueueControllerOf),
-			DeleteFunc: impl.EnqueueControllerOf,
-		},
+		Handler:    reconciler.Handler(impl.EnqueueControllerOf),
 	})
 
 	routeInformer.Informer().AddEventHandler(cache.FilteringResourceEventHandler{
 		FilterFunc: controller.Filter(v1alpha1.SchemeGroupVersion.WithKind("Service")),
-		Handler: cache.ResourceEventHandlerFuncs{
-			AddFunc:    impl.EnqueueControllerOf,
-			UpdateFunc: controller.PassNew(impl.EnqueueControllerOf),
-			DeleteFunc: impl.EnqueueControllerOf,
-		},
+		Handler:    reconciler.Handler(impl.EnqueueControllerOf),
 	})
 
 	return impl
@@ -144,8 +134,9 @@ func (c *Reconciler) Reconcile(ctx context.Context, key string) error {
 		// This is important because the copy we loaded from the informer's
 		// cache may be stale and we don't want to overwrite a prior update
 		// to status with this stale state.
+
 	} else if _, uErr := c.updateStatus(service); uErr != nil {
-		logger.Warn("Failed to update service status", zap.Error(uErr))
+		logger.Warnw("Failed to update service status", zap.Error(uErr))
 		c.Recorder.Eventf(service, corev1.EventTypeWarning, "UpdateFailed",
 			"Failed to update status for Service %q: %v", service.Name, uErr)
 		return uErr
@@ -153,17 +144,23 @@ func (c *Reconciler) Reconcile(ctx context.Context, key string) error {
 		// If there was a difference and there was no error.
 		c.Recorder.Eventf(service, corev1.EventTypeNormal, "Updated", "Updated Service %q", service.GetName())
 	}
+	if err != nil {
+		c.Recorder.Event(service, corev1.EventTypeWarning, "InternalError", err.Error())
+	}
 	return err
 }
 
 func (c *Reconciler) reconcile(ctx context.Context, service *v1alpha1.Service) error {
 	logger := logging.FromContext(ctx)
+	if service.GetDeletionTimestamp() != nil {
+		return nil
+	}
 
 	// We may be reading a version of the object that was stored at an older version
 	// and may not have had all of the assumed defaults specified.  This won't result
 	// in this getting written back to the API Server, but lets downstream logic make
 	// assumptions about defaulting.
-	service.SetDefaults()
+	service.SetDefaults(ctx)
 
 	service.Status.InitializeConditions()
 
@@ -178,15 +175,23 @@ func (c *Reconciler) reconcile(ctx context.Context, service *v1alpha1.Service) e
 		}
 		c.Recorder.Eventf(service, corev1.EventTypeNormal, "Created", "Created Configuration %q", configName)
 	} else if err != nil {
-		logger.Errorf("Failed to reconcile Service: %q failed to Get Configuration: %q; %v", service.Name, configName, zap.Error(err))
+		logger.Errorw(
+			fmt.Sprintf("Failed to reconcile Service: %q failed to Get Configuration: %q", service.Name, configName),
+			zap.Error(err))
 		return err
+	} else if !metav1.IsControlledBy(config, service) {
+		// Surface an error in the service's status,and return an error.
+		service.Status.MarkConfigurationNotOwned(configName)
+		return fmt.Errorf("Service: %q does not own Configuration: %q", service.Name, configName)
 	} else if config, err = c.reconcileConfiguration(ctx, service, config); err != nil {
-		logger.Errorf("Failed to reconcile Service: %q failed to reconcile Configuration: %q; %v", service.Name, configName, zap.Error(err))
+		logger.Errorw(
+			fmt.Sprintf("Failed to reconcile Service: %q failed to reconcile Configuration: %q",
+				service.Name, configName), zap.Error(err))
 		return err
 	}
 
 	// Update our Status based on the state of our underlying Configuration.
-	service.Status.PropagateConfigurationStatus(config.Status)
+	service.Status.PropagateConfigurationStatus(&config.Status)
 
 	routeName := resourcenames.Route(service)
 	route, err := c.routeLister.Routes(service.Namespace).Get(routeName)
@@ -201,13 +206,39 @@ func (c *Reconciler) reconcile(ctx context.Context, service *v1alpha1.Service) e
 	} else if err != nil {
 		logger.Errorf("Failed to reconcile Service: %q failed to Get Route: %q", service.Name, routeName)
 		return err
+	} else if !metav1.IsControlledBy(route, service) {
+		// Surface an error in the service's status, and return an error.
+		service.Status.MarkRouteNotOwned(routeName)
+		return fmt.Errorf("Service: %q does not own Route: %q", service.Name, routeName)
 	} else if route, err = c.reconcileRoute(ctx, service, route); err != nil {
 		logger.Errorf("Failed to reconcile Service: %q failed to reconcile Route: %q", service.Name, routeName)
 		return err
 	}
 
 	// Update our Status based on the state of our underlying Route.
-	service.Status.PropagateRouteStatus(route.Status)
+	ss := &service.Status
+	ss.PropagateRouteStatus(&route.Status)
+
+	// `manual` is not reconciled.
+	if rc := service.Status.GetCondition(v1alpha1.ServiceConditionRoutesReady); rc != nil && rc.Status == corev1.ConditionTrue {
+		want, got := route.Spec.DeepCopy().Traffic, route.Status.Traffic
+		// Replace `configuration` target with its latest ready revision.
+		for idx := range want {
+			if want[idx].ConfigurationName == config.Name {
+				want[idx].RevisionName = config.Status.LatestReadyRevisionName
+				want[idx].ConfigurationName = ""
+			}
+		}
+		ignoreURLs := cmp.FilterPath(
+			func(p cmp.Path) bool {
+				return p.String() == "URL"
+			},
+			cmp.Ignore(),
+		)
+		if eq, err := kmp.SafeEqual(got, want, ignoreURLs); !eq || err != nil {
+			service.Status.MarkRouteNotYetReady()
+		}
+	}
 	service.Status.ObservedGeneration = service.Generation
 
 	return nil
@@ -222,14 +253,14 @@ func (c *Reconciler) updateStatus(desired *v1alpha1.Service) (*v1alpha1.Service,
 	if reflect.DeepEqual(service.Status, desired.Status) {
 		return service, nil
 	}
-	becomesRdy := desired.Status.IsReady() && !service.Status.IsReady()
+	becomesReady := desired.Status.IsReady() && !service.Status.IsReady()
 	// Don't modify the informers copy.
 	existing := service.DeepCopy()
 	existing.Status = desired.Status
 
 	svc, err := c.ServingClientSet.ServingV1alpha1().Services(desired.Namespace).UpdateStatus(existing)
-	if err == nil && becomesRdy {
-		duration := time.Now().Sub(svc.ObjectMeta.CreationTimestamp.Time)
+	if err == nil && becomesReady {
+		duration := time.Since(svc.ObjectMeta.CreationTimestamp.Time)
 		c.Logger.Infof("Service %q became ready after %v", service.Name, duration)
 		c.StatsReporter.ReportServiceReady(service.Namespace, service.Name, duration)
 	}
@@ -276,7 +307,7 @@ func (c *Reconciler) reconcileConfiguration(ctx context.Context, service *v1alph
 	ignoreRouteLabelChange(desiredConfig, config)
 
 	// TODO(#642): Remove this (needed to avoid continuous updates)
-	desiredConfig.Spec.Generation = config.Spec.Generation
+	desiredConfig.Spec.DeprecatedGeneration = config.Spec.DeprecatedGeneration
 
 	if configSemanticEquals(desiredConfig, config) {
 		// No differences to reconcile.
@@ -323,7 +354,7 @@ func (c *Reconciler) reconcileRoute(ctx context.Context, service *v1alpha1.Servi
 	}
 
 	// TODO(#642): Remove this (needed to avoid continuous updates).
-	desiredRoute.Spec.Generation = route.Spec.Generation
+	desiredRoute.Spec.DeprecatedGeneration = route.Spec.DeprecatedGeneration
 
 	if routeSemanticEquals(desiredRoute, route) {
 		// No differences to reconcile.

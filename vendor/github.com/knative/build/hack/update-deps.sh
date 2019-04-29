@@ -25,7 +25,7 @@ cd ${REPO_ROOT_DIR}
 # Ensure we have everything we need under vendor/
 dep ensure
 
-# Keep the only dir in knative/test-infra we're interested in
-find vendor/github.com/knative/test-infra -mindepth 1 -maxdepth 1 ! -name scripts -exec rm -fr {} \;
+rm -rf $(find vendor/ -name 'OWNERS')
+rm -rf $(find vendor/ -name '*_test.go')
 
 update_licenses third_party/VENDOR-LICENSE "./cmd/*"

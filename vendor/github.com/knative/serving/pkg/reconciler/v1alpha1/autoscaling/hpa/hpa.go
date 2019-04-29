@@ -30,8 +30,10 @@ import (
 	"github.com/knative/serving/pkg/reconciler"
 	"github.com/knative/serving/pkg/reconciler/v1alpha1/autoscaling/hpa/resources"
 	"go.uber.org/zap"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/runtime"
 	autoscalingv1informers "k8s.io/client-go/informers/autoscaling/v1"
 	autoscalingv1listers "k8s.io/client-go/listers/autoscaling/v1"
@@ -67,20 +69,12 @@ func NewController(
 	onlyHpaClass := reconciler.AnnotationFilterFunc(autoscaling.ClassAnnotationKey, autoscaling.HPA, false)
 	paInformer.Informer().AddEventHandler(cache.FilteringResourceEventHandler{
 		FilterFunc: onlyHpaClass,
-		Handler: cache.ResourceEventHandlerFuncs{
-			AddFunc:    impl.Enqueue,
-			UpdateFunc: controller.PassNew(impl.Enqueue),
-			DeleteFunc: impl.Enqueue,
-		},
+		Handler:    reconciler.Handler(impl.Enqueue),
 	})
 
 	hpaInformer.Informer().AddEventHandler(cache.FilteringResourceEventHandler{
 		FilterFunc: onlyHpaClass,
-		Handler: cache.ResourceEventHandlerFuncs{
-			AddFunc:    impl.EnqueueControllerOf,
-			UpdateFunc: controller.PassNew(impl.EnqueueControllerOf),
-			DeleteFunc: impl.EnqueueControllerOf,
-		},
+		Handler:    reconciler.Handler(impl.EnqueueControllerOf),
 	})
 
 	return impl
@@ -118,11 +112,14 @@ func (c *Reconciler) Reconcile(ctx context.Context, key string) error {
 		// This is important because the copy we loaded from the informer's
 		// cache may be stale and we don't want to overwrite a prior update
 		// to status with this stale state.
-	} else {
-		if _, err := c.updateStatus(pa); err != nil {
-			logger.Warn("Failed to update pa status", zap.Error(err))
-			return err
-		}
+	} else if _, err := c.updateStatus(pa); err != nil {
+		logger.Warnw("Failed to update pa status", zap.Error(err))
+		c.Recorder.Eventf(pa, corev1.EventTypeWarning, "UpdateFailed",
+			"Failed to update status for PA %q: %v", pa.Name, err)
+		return err
+	}
+	if err != nil {
+		c.Recorder.Event(pa, corev1.EventTypeWarning, "InternalError", err.Error())
 	}
 	return err
 }
@@ -130,11 +127,15 @@ func (c *Reconciler) Reconcile(ctx context.Context, key string) error {
 func (c *Reconciler) reconcile(ctx context.Context, key string, pa *pav1alpha1.PodAutoscaler) error {
 	logger := logging.FromContext(ctx)
 
+	if pa.GetDeletionTimestamp() != nil {
+		return nil
+	}
+
 	// We may be reading a version of the object that was stored at an older version
 	// and may not have had all of the assumed defaults specified.  This won't result
 	// in this getting written back to the API Server, but lets downstream logic make
 	// assumptions about defaulting.
-	pa.SetDefaults()
+	pa.SetDefaults(ctx)
 
 	pa.Status.InitializeConditions()
 	logger.Debug("PA exists")
@@ -149,11 +150,16 @@ func (c *Reconciler) reconcile(ctx context.Context, key string, pa *pav1alpha1.P
 		logger.Infof("Creating HPA %q", desiredHpa.Name)
 		if _, err := c.KubeClientSet.AutoscalingV1().HorizontalPodAutoscalers(pa.Namespace).Create(desiredHpa); err != nil {
 			logger.Errorf("Error creating HPA %q: %v", desiredHpa.Name, err)
+			pa.Status.MarkResourceFailedCreation("HorizontalPodAutoscaler", desiredHpa.Name)
 			return err
 		}
 	} else if err != nil {
 		logger.Errorf("Error getting existing HPA %q: %v", desiredHpa.Name, err)
 		return err
+	} else if !metav1.IsControlledBy(hpa, pa) {
+		// Surface an error in the PodAutoscaler's status, and return an error.
+		pa.Status.MarkResourceNotOwned("HorizontalPodAutoscaler", desiredHpa.Name)
+		return fmt.Errorf("PodAutoscaler: %q does not own HPA: %q", pa.Name, desiredHpa.Name)
 	} else {
 		if !equality.Semantic.DeepEqual(desiredHpa.Spec, hpa.Spec) {
 			logger.Infof("Updating HPA %q", desiredHpa.Name)
@@ -163,6 +169,7 @@ func (c *Reconciler) reconcile(ctx context.Context, key string, pa *pav1alpha1.P
 			}
 		}
 	}
+	pa.Status.ObservedGeneration = pa.Generation
 	return nil
 }
 

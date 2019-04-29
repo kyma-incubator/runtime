@@ -47,8 +47,14 @@ kind: Deployment
 metadata:
   name: hello-world
 spec:
+  selector:
+    matchLabels:
+      foo: bar
   replicas: 1
   template:
+    metadata:
+      labels:
+        foo: bar
     spec:
       containers:
       - name: hello-world
@@ -221,6 +227,25 @@ rebuild, repush, and redeploy their changes.
 `ko apply` will invoke `kubectl apply` under the covers, and therefore apply
 to whatever `kubectl` context is active.
 
+### `ko apply --watch` (EXPERIMENTAL)
+
+The `--watch` flag (`-W` for short) does an initial `apply` as above, but as it
+does, it builds up a dependency graph of your program and starts to continuously
+monitor the filesystem for changes. When a file changes, it re-applies any yamls
+that are affected.
+
+For example, if I edit `github.com/foo/bar/pkg/baz/blah.go`, the tool sees that
+the `github.com/foo/bar/pkg/baz` package has changed, and perhaps both
+`github.com/foo/bar/cmd/one` and `github.com/foo/bar/cmd/two` consume that library
+and were referenced by `config/one-deploy.yaml` and `config/two-deploy.yaml`.
+The edit would effectively result in a re-application of:
+
+```
+ko apply -f config/one-deploy.yaml -f config/two-deploy.yaml
+```
+
+This flag is still experimental, and feedback is very welcome.
+
 ### `ko delete`
 
 `ko delete` simply passes through to `kubectl delete`. It is exposed purely out
@@ -265,8 +290,10 @@ With `--local` import paths are always preserved (see `--preserve-import-paths`)
 While `ko` aims to have zero configuration, there are certain scenarios where
 you will want to override `ko`'s default behavior. This is done via `.ko.yaml`.
 
-`.ko.yaml` is put into the directory from which `ko` will be invoked. If it
-is not present, then `ko` will rely on its default behaviors.
+`.ko.yaml` is put into the directory from which `ko` will be invoked. One can
+override the directory with the `KO_CONFIG_PATH` environment variable.
+
+If neither is present, then `ko` will rely on its default behaviors.
 
 ### Overriding the default base image
 

@@ -22,6 +22,7 @@ import (
 	"github.com/knative/pkg/controller"
 	"github.com/knative/pkg/logging"
 	apierrs "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/tools/cache"
 
 	servinginformers "github.com/knative/serving/pkg/client/informers/externalversions/serving/v1alpha1"
@@ -64,11 +65,7 @@ func NewRouteToConfigurationController(
 	impl := controller.NewImpl(c, c.Logger, "Labels", reconciler.MustNewStatsReporter("Labels", c.Logger))
 
 	c.Logger.Info("Setting up event handlers")
-	routeInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    impl.Enqueue,
-		UpdateFunc: controller.PassNew(impl.Enqueue),
-		DeleteFunc: impl.Enqueue,
-	})
+	routeInformer.Informer().AddEventHandler(reconciler.Handler(impl.Enqueue))
 
 	return impl
 }
@@ -90,7 +87,7 @@ func (c *Reconciler) Reconcile(ctx context.Context, key string) error {
 	if apierrs.IsNotFound(err) {
 		logger.Infof("Clearing labels for deleted Route: %q", key)
 		return c.deleteLabelForOutsideOfGivenConfigurations(
-			ctx, namespace, name, map[string]struct{}{},
+			ctx, namespace, name, sets.NewString(),
 		)
 	} else if err != nil {
 		return err

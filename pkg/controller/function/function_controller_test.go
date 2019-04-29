@@ -89,7 +89,10 @@ func TestReconcile(t *testing.T) {
 	}
 
 	fnConfig := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{Name: "fn-config", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "fn-config",
+			Namespace: "default",
+		},
 		Data: map[string]string{
 			"dockerRegistry":     "test",
 			"serviceAccountName": "build-bot",
@@ -103,7 +106,10 @@ func TestReconcile(t *testing.T) {
 	}
 
 	dockerFileConfigNodejs := &corev1.ConfigMap{
-		ObjectMeta: metav1.ObjectMeta{Name: "dockerfile-nodejs8", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "dockerfile-nodejs8",
+			Namespace: "default",
+		},
 		Data: map[string]string{
 			"Dockerfile": `FROM kubeless/nodejs@sha256:5c3c21cf29231f25a0d7d2669c6f18c686894bf44e975fcbbbb420c6d045f7e7
 				USER root
@@ -183,6 +189,12 @@ func TestReconcile(t *testing.T) {
 	g.Expect(len(buildSpec.Volumes)).To(gomega.Equal(2))
 	g.Expect(buildSpec.ServiceAccountName).To(gomega.Equal("build-bot"))
 	g.Expect(service.Spec.RunLatest.Configuration.RevisionTemplate.Spec.Container.Image).To(gomega.HavePrefix("test/default-foo"))
+
+	g.Eventually(func() error { return c.Get(context.TODO(), depKey, fn) }, timeout).Should(gomega.Succeed())
+	fn.Spec.Function = `main() {return "bla"}`
+	g.Expect(c.Update(context.TODO(), fn)).NotTo(gomega.HaveOccurred())
+	g.Eventually(func() error { return c.Get(context.TODO(), depKey, fn) }, timeout).Should(gomega.Succeed())
+	g.Expect(fn.Spec.Function).To(gomega.Equal(`main() {return "bla"}`))
 
 	// fnWithReducedParams := &runtimev1alpha1.Function{
 	// 	ObjectMeta: metav1.ObjectMeta{

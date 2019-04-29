@@ -17,7 +17,7 @@ run: generate fmt vet
 	go run ./cmd/manager/main.go
 
 # Install CRDs into a cluster
-install:
+install: 
 	kubectl apply -f config/crds/runtime_v1alpha1_function.yaml
 
 # CreateResource creates a resource in the cluster
@@ -51,11 +51,13 @@ generate:
 
 # Build the docker image
 # docker-build: test
+.PHONY: docker-build
 docker-build:
 	docker build . -t ${IMG}
 	@echo "updating kustomize image patch file for manager resource"
 	sed -i'' -e 's@image: .*@image: '"${IMG}"'@' ./config/default/manager_image_patch.yaml
 
 # Push the docker image
-docker-push:
+.PHONY: docker-push
+docker-push: docker-build
 	docker push ${IMG}

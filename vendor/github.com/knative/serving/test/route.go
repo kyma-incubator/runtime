@@ -19,43 +19,42 @@ limitations under the License.
 package test
 
 import (
-	"fmt"
 	"net/http"
-	"time"
+	"testing"
 
-	pkgTest "github.com/knative/pkg/test"
-	"github.com/knative/pkg/test/logging"
 	"github.com/knative/pkg/test/spoof"
 	"github.com/knative/serving/pkg/apis/serving/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+
+	rtesting "github.com/knative/serving/pkg/reconciler/v1alpha1/testing"
 )
 
 // CreateRoute creates a route in the given namespace using the route name in names
-func CreateRoute(logger *logging.BaseLogger, clients *Clients, names ResourceNames) (*v1alpha1.Route, error) {
-	route := Route(ServingNamespace, names)
-	LogResourceObject(logger, ResourceObjects{Route: route})
+func CreateRoute(t *testing.T, clients *Clients, names ResourceNames, fopt ...rtesting.RouteOption) (*v1alpha1.Route, error) {
+	route := Route(ServingNamespace, names, fopt...)
+	LogResourceObject(t, ResourceObjects{Route: route})
 	return clients.ServingClient.Routes.Create(route)
 }
 
 // CreateBlueGreenRoute creates a route in the given namespace using the route name in names.
 // Traffic is evenly split between the two routes specified by blue and green.
-func CreateBlueGreenRoute(logger *logging.BaseLogger, clients *Clients, names, blue, green ResourceNames) error {
+func CreateBlueGreenRoute(t *testing.T, clients *Clients, names, blue, green ResourceNames) error {
 	route := BlueGreenRoute(ServingNamespace, names, blue, green)
-	LogResourceObject(logger, ResourceObjects{Route: route})
+	LogResourceObject(t, ResourceObjects{Route: route})
 	_, err := clients.ServingClient.Routes.Create(route)
 	return err
 }
 
-// UpdateRoute updates a route in the given namespace using the route name in names
-func UpdateBlueGreenRoute(logger *logging.BaseLogger, clients *Clients, names, blue, green ResourceNames) (*v1alpha1.Route, error) {
+// UpdateBlueGreenRoute updates a route in the given namespace using the route name in names.
+func UpdateBlueGreenRoute(t *testing.T, clients *Clients, names, blue, green ResourceNames) (*v1alpha1.Route, error) {
 	route, err := clients.ServingClient.Routes.Get(names.Route, metav1.GetOptions{})
 	if err != nil {
 		return nil, err
 	}
 	newRoute := BlueGreenRoute(ServingNamespace, names, blue, green)
 	newRoute.ObjectMeta = route.ObjectMeta
-	LogResourceObject(logger, ResourceObjects{Route: newRoute})
+	LogResourceObject(t, ResourceObjects{Route: newRoute})
 	patchBytes, err := createPatch(route, newRoute)
 	if err != nil {
 		return nil, err
@@ -63,51 +62,15 @@ func UpdateBlueGreenRoute(logger *logging.BaseLogger, clients *Clients, names, b
 	return clients.ServingClient.Routes.Patch(names.Route, types.JSONPatchType, patchBytes, "")
 }
 
-// RunRouteProber creates and runs a prober as background goroutine to keep polling Route.
-// It stops when getting an error response from Route.
-func RunRouteProber(logger *logging.BaseLogger, clients *Clients, domain string) <-chan error {
-	logger.Infof("Starting Route prober for route domain %s.", domain)
-	errorChan := make(chan error, 1)
-	go func() {
-		client, err := pkgTest.NewSpoofingClient(clients.KubeClient, logger, domain, ServingFlags.ResolvableDomain)
-		if err != nil {
-			errorChan <- err
-			close(errorChan)
-			return
-		}
-		// ResquestTimeout is set to 0 to make the polling infinite.
-		client.RequestTimeout = 0 * time.Minute
-		req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://%s", domain), nil)
-		if err != nil {
-			errorChan <- err
-			close(errorChan)
-			return
+// RetryingRouteInconsistency retries common requests seen when creating a new route
+// - 404 until the route is propagated to the proxy
+func RetryingRouteInconsistency(innerCheck spoof.ResponseChecker) spoof.ResponseChecker {
+	return func(resp *spoof.Response) (bool, error) {
+		if resp.StatusCode == http.StatusNotFound {
+			return false, nil
 		}
 
-		// We keep polling Route if the response status is OK.
-		// If the response status is not OK, we stop the prober and
-		// generate error based on the response.
-		_, err = client.Poll(req, pkgTest.Retrying(disallowsAny, http.StatusOK))
-		if err != nil {
-			errorChan <- err
-			close(errorChan)
-			return
-		}
-	}()
-	return errorChan
-}
-
-// GetRouteProberError gets the error of route prober.
-func GetRouteProberError(errorChan <-chan error, logger *logging.BaseLogger) error {
-	select {
-	case err := <-errorChan:
-		return err
-	default:
-		logger.Info("No error happens in the Route prober.")
-		return nil
+		// If we didn't match any retryable codes, invoke the ResponseChecker that we wrapped.
+		return innerCheck(resp)
 	}
-}
-
-func disallowsAny(response *spoof.Response) (bool, error) {
-	return true, fmt.Errorf("Get unexpected response %v", response)
 }

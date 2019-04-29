@@ -36,11 +36,11 @@ func AllRouteTrafficAtRevision(names ResourceNames) func(r *v1alpha1.Route) (boo
 		for _, tt := range r.Status.Traffic {
 			if tt.Percent == 100 {
 				if tt.RevisionName != names.Revision {
-					return true, fmt.Errorf("Expected traffic revision name to be %s but actually is %s", names.Revision, tt.RevisionName)
+					return true, fmt.Errorf("expected traffic revision name to be %s but actually is %s", names.Revision, tt.RevisionName)
 				}
 
 				if tt.Name != names.TrafficTarget {
-					return true, fmt.Errorf("Expected traffic target name to be %s but actually is %s", names.TrafficTarget, tt.Name)
+					return true, fmt.Errorf("expected traffic target name to be %s but actually is %s", names.TrafficTarget, tt.Name)
 				}
 
 				return true, nil
@@ -54,24 +54,24 @@ func AllRouteTrafficAtRevision(names ResourceNames) func(r *v1alpha1.Route) (boo
 // traffic using in cluster DNS and return true if the revision received the request.
 func TODO_RouteTrafficToRevisionWithInClusterDNS(r *v1alpha1.Route) (bool, error) {
 	if r.Status.Address == nil {
-		return false, fmt.Errorf("Expected route %s to implement Addressable, missing .status.address", r.Name)
+		return false, fmt.Errorf("expected route %s to implement Addressable, missing .status.address", r.Name)
 	}
 	if r.Status.Address.Hostname == "" {
-		return false, fmt.Errorf("Expected route %s to have in cluster dns status set", r.Name)
+		return false, fmt.Errorf("expected route %s to have in cluster dns status set", r.Name)
 	}
 	// TODO make a curl request from inside the cluster using
 	// r.Status.Address.Hostname to validate DNS is set correctly
 	return true, nil
 }
 
-// ServiceTrafficToRevisionWithInClusterDNS will check the revision that route r is routing
+// TODO_ServiceTrafficToRevisionWithInClusterDNS will check the revision that route r is routing
 // traffic using in cluster DNS and return true if the revision received the request.
 func TODO_ServiceTrafficToRevisionWithInClusterDNS(s *v1alpha1.Service) (bool, error) {
 	if s.Status.Address == nil {
-		return false, fmt.Errorf("Expected service %s to implement Addressable, missing .status.address", s.Name)
+		return false, fmt.Errorf("expected service %s to implement Addressable, missing .status.address", s.Name)
 	}
 	if s.Status.Address.Hostname == "" {
-		return false, fmt.Errorf("Expected service %s to have in cluster dns status set", s.Name)
+		return false, fmt.Errorf("expected service %s to have in cluster dns status set", s.Name)
 	}
 	// TODO make a curl request from inside the cluster using
 	// s.Status.Address.Hostname to validate DNS is set correctly
@@ -82,19 +82,19 @@ func TODO_ServiceTrafficToRevisionWithInClusterDNS(s *v1alpha1.Service) (bool, e
 // ready to serve traffic. It will return false if the status indicates a state other than deploying
 // or being ready. It will also return false if the type of the condition is unexpected.
 func IsRevisionReady(r *v1alpha1.Revision) (bool, error) {
-	return r.Status.IsReady(), nil
+	return r.Generation == r.Status.ObservedGeneration && r.Status.IsReady(), nil
 }
 
 // IsServiceReady will check the status conditions of the service and return true if the service is
 // ready. This means that its configurations and routes have all reported ready.
 func IsServiceReady(s *v1alpha1.Service) (bool, error) {
-	return s.Status.IsReady(), nil
+	return s.Generation == s.Status.ObservedGeneration && s.Status.IsReady(), nil
 }
 
 // IsRouteReady will check the status conditions of the route and return true if the route is
 // ready.
 func IsRouteReady(r *v1alpha1.Route) (bool, error) {
-	return r.Status.IsReady(), nil
+	return r.Generation == r.Status.ObservedGeneration && r.Status.IsReady(), nil
 }
 
 // ConfigurationHasCreatedRevision returns whether the Configuration has created a Revision.
@@ -124,15 +124,14 @@ func IsConfigRevisionCreationFailed(c *v1alpha1.Configuration) (bool, error) {
 // IsRevisionAtExpectedGeneration returns a function that will check if the annotations
 // on the revision include an annotation for the generation and that the annotation is
 // set to the expected value.
-// TODO(dprotaso) Delete this assertion for the 0.4 release
 func IsRevisionAtExpectedGeneration(expectedGeneration string) func(r *v1alpha1.Revision) (bool, error) {
 	return func(r *v1alpha1.Revision) (bool, error) {
-		if a, ok := r.Labels[serving.DeprecatedConfigurationGenerationLabelKey]; ok {
+		if a, ok := r.Labels[serving.ConfigurationGenerationLabelKey]; ok {
 			if a != expectedGeneration {
-				return true, fmt.Errorf("Expected Revision %s to be labeled with generation %s but was %s instead", r.Name, expectedGeneration, a)
+				return true, fmt.Errorf("expected Revision %s to be labeled with generation %s but was %s instead", r.Name, expectedGeneration, a)
 			}
 			return true, nil
 		}
-		return true, fmt.Errorf("Expected Revision %s to be labeled with generation %s but there was no label", r.Name, expectedGeneration)
+		return true, fmt.Errorf("expected Revision %s to be labeled with generation %s but there was no label", r.Name, expectedGeneration)
 	}
 }

@@ -17,14 +17,15 @@ required = [
   name = "gopkg.in/yaml.v2"
   version = "v2.2.1"
 
-[[constraint]]
+[[override]]
   name = "github.com/knative/build"
-  version = "v0.2.0"
+  # HEAD as of 2019-03-21
+  revision = "dd3ceb3323922b899a0a913f885fcf59943e7b59"
 
 [[override]]
   name = "github.com/knative/pkg"
-  # HEAD as of 2018-01-08
-  revision = "4365af623c7508773e6075554fd34ee28d39b0dc"
+  # HEAD as of 2019-03-29
+  revision = "916205998db9d085aaff357221b208bc89290ea5"
 
 [[override]]
   name = "go.uber.org/zap"
@@ -32,34 +33,41 @@ required = [
 
 [[constraint]]
   name = "github.com/knative/caching"
-  revision = "06e9787157505a649b07677e77d26202ac91431c"
+  # HEAD as of 2019-03-29
+  revision = "babf400eeec07acdd0d6864ad28709c2bcee0c82"
 
 [[constraint]]
   name = "github.com/google/go-containerregistry"
-  # HEAD as of 2018-08-06
-  revision = "5f7b0e4895413d785ff15b84d218d73e8a47866a"
+  # HEAD as of 2019-02-06
+  revision = "dbc4da98389f9d0c42eb314c2b346bf1d2a27310"
 
 [[override]]
   name = "k8s.io/api"
-  version = "kubernetes-1.11.3"
+  version = "kubernetes-1.12.6"
 
 [[override]]
   name = "k8s.io/apimachinery"
-  version = "kubernetes-1.11.3"
+  version = "kubernetes-1.12.6"
 
 [[override]]
   name = "k8s.io/code-generator"
-  version = "kubernetes-1.11.3"
+  version = "kubernetes-1.12.6"
 
 [[override]]
   name = "k8s.io/client-go"
-  version = "kubernetes-1.11.3"
+  version = "kubernetes-1.12.6"
 
 [[override]]
-  name = "github.com/json-iterator/go"
-  # This is the commit at which k8s depends on this in 1.11
-  # It seems to be broken at HEAD.
-  revision = "f2b4162afba35581b6d4a50d3b8f34e33c144682"
+  name = "github.com/rogpeppe/go-internal"
+  # HEAD as of 2019-01-09
+  # Needed because release 1.0.0 does not contain a LICENSE file
+  revision = "4bbc89b6501cca7dd6b5557d78d70c8d2c6e8b97"
+
+[[override]]
+  name = "contrib.go.opencensus.io/exporter/stackdriver"
+  # HEAD as of 2019-02-11
+  # Needed because this includes a fix to support Stackdriver built-in metrics
+  revision = "c06c82c832edca4eaf7b0241bd655560a1be0346"
 
 [prune]
   go-tests = true

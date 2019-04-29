@@ -28,6 +28,7 @@ import (
 
 func init() { Root.AddCommand(NewCmdRebase()) }
 
+// NewCmdRebase creates a new cobra.Command for the rebase subcommand.
 func NewCmdRebase() *cobra.Command {
 	var orig, oldBase, newBase, rebased string
 	rebaseCmd := &cobra.Command{
@@ -75,7 +76,7 @@ func rebase(orig, oldBase, newBase, rebased string) {
 		log.Fatalf("parsing tag %q: %v", rebased, err)
 	}
 
-	rebasedImg, err := mutate.Rebase(origImg, oldBaseImg, newBaseImg, nil)
+	rebasedImg, err := mutate.Rebase(origImg, oldBaseImg, newBaseImg)
 	if err != nil {
 		log.Fatalf("rebasing: %v", err)
 	}
@@ -90,7 +91,7 @@ func rebase(orig, oldBase, newBase, rebased string) {
 		log.Fatalf("getting creds for %q: %v", rebasedTag, err)
 	}
 
-	if err := remote.Write(rebasedTag, rebasedImg, auth, http.DefaultTransport, remote.WriteOptions{}); err != nil {
+	if err := remote.Write(rebasedTag, rebasedImg, auth, http.DefaultTransport); err != nil {
 		log.Fatalf("writing image %q: %v", rebasedTag, err)
 	}
 	fmt.Print(dig.String())

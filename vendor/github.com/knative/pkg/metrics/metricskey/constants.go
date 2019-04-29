@@ -13,12 +13,14 @@ limitations under the License.
 
 package metricskey
 
+import "k8s.io/apimachinery/pkg/util/sets"
+
 const (
 	// ResourceTypeKnativeRevision is the Stackdriver resource type for Knative revision
 	ResourceTypeKnativeRevision = "knative_revision"
 
 	// LabelProject is the label for project (e.g. GCP GAIA ID, AWS project name)
-	LabelProject = "project"
+	LabelProject = "project_id"
 
 	// LabelLocation is the label for location (e.g. GCE zone, AWS region) where the service is deployed
 	LabelLocation = "location"
@@ -49,24 +51,29 @@ const (
 var (
 	// KnativeRevisionLabels stores the set of resource labels for resource type knative_revision.
 	// LabelRouteName is added as extra label since it is optional, not in this map.
-	KnativeRevisionLabels = map[string]struct{}{
-		LabelProject:           struct{}{},
-		LabelLocation:          struct{}{},
-		LabelClusterName:       struct{}{},
-		LabelNamespaceName:     struct{}{},
-		LabelServiceName:       struct{}{},
-		LabelConfigurationName: struct{}{},
-		LabelRevisionName:      struct{}{},
-	}
+	KnativeRevisionLabels = sets.NewString(
+		LabelProject,
+		LabelLocation,
+		LabelClusterName,
+		LabelNamespaceName,
+		LabelServiceName,
+		LabelConfigurationName,
+		LabelRevisionName,
+	)
 
-	// ResourceTypeToLabelsMap maps resource type to the set of resource labels
-	ResourceTypeToLabelsMap = map[string]map[string]struct{}{
-		ResourceTypeKnativeRevision: KnativeRevisionLabels,
-	}
-
-	// KnativeRevisionMetricsPrefixes stores a set of metrics prefixes that belong to resource type knative_revision
-	KnativeRevisionMetricsPrefixes = map[string]struct{}{
-		"knative.dev/serving/autoscaler": struct{}{},
-		"knative.dev/serving/activator":  struct{}{},
-	}
+	// KnativeRevisionMetrics stores a set of metric types which are supported
+	// by resource type knative_revision.
+	KnativeRevisionMetrics = sets.NewString(
+		"knative.dev/serving/activator/request_count",
+		"knative.dev/serving/activator/request_latencies",
+		"knative.dev/serving/autoscaler/desired_pods",
+		"knative.dev/serving/autoscaler/requested_pods",
+		"knative.dev/serving/autoscaler/actual_pods",
+		"knative.dev/serving/autoscaler/stable_request_concurrency",
+		"knative.dev/serving/autoscaler/panic_request_concurrency",
+		"knative.dev/serving/autoscaler/target_concurrency_per_pod",
+		"knative.dev/serving/autoscaler/panic_mode",
+		"knative.dev/serving/revision/request_count",
+		"knative.dev/serving/revision/request_latencies",
+	)
 )

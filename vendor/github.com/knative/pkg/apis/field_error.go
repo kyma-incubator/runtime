@@ -91,7 +91,7 @@ func (fe *FieldError) ViaFieldIndex(field string, index int) *FieldError {
 
 // ViaKey is used to attach a key to the next ViaField provided.
 // For example, if a type recursively validates a parameter that has a collection:
-//  for k, v := range spec.Bag. {
+//  for k, v := range spec.Bag {
 //    if err := doValidation(v); err != nil {
 //      return err.ViaKey(k).ViaField("bag")
 //    }
@@ -192,7 +192,7 @@ func asKey(key string) string {
 //   err([0]).ViaField(bar).ViaField(foo) -> foo.bar.[0] converts to foo.bar[0]
 //   err(bar).ViaIndex(0).ViaField(foo) -> foo.[0].bar converts to foo[0].bar
 //   err(bar).ViaField(foo).ViaIndex(0) -> [0].foo.bar converts to [0].foo.bar
-//   err(bar).ViaIndex(0).ViaIndex[1].ViaField(foo) -> foo.[1].[0].bar converts to foo[1][0].bar
+//   err(bar).ViaIndex(0).ViaIndex(1).ViaField(foo) -> foo.[1].[0].bar converts to foo[1][0].bar
 func flatten(path []string) string {
 	var newPath []string
 	for _, part := range path {
@@ -300,11 +300,17 @@ func ErrDisallowedFields(fieldPaths ...string) *FieldError {
 	}
 }
 
+// ErrInvalidArrayValue constructs a FieldError for a repetetive `field`
+// at `index` that has received an invalid string value.
+func ErrInvalidArrayValue(value interface{}, field string, index int) *FieldError {
+	return ErrInvalidValue(value, CurrentField).ViaFieldIndex(field, index)
+}
+
 // ErrInvalidValue constructs a FieldError for a field that has received an
 // invalid string value.
-func ErrInvalidValue(value, fieldPath string) *FieldError {
+func ErrInvalidValue(value interface{}, fieldPath string) *FieldError {
 	return &FieldError{
-		Message: fmt.Sprintf("invalid value %q", value),
+		Message: fmt.Sprintf("invalid value: %v", value),
 		Paths:   []string{fieldPath},
 	}
 }
@@ -329,9 +335,9 @@ func ErrMultipleOneOf(fieldPaths ...string) *FieldError {
 
 // ErrInvalidKeyName is a variadic helper method for constructing a FieldError
 // that specifies a key name that is invalid.
-func ErrInvalidKeyName(value, fieldPath string, details ...string) *FieldError {
+func ErrInvalidKeyName(key, fieldPath string, details ...string) *FieldError {
 	return &FieldError{
-		Message: fmt.Sprintf("invalid key name %q", value),
+		Message: fmt.Sprintf("invalid key name %q", key),
 		Paths:   []string{fieldPath},
 		Details: strings.Join(details, ", "),
 	}
@@ -339,9 +345,9 @@ func ErrInvalidKeyName(value, fieldPath string, details ...string) *FieldError {
 
 // ErrOutOfBoundsValue constructs a FieldError for a field that has received an
 // out of bound value.
-func ErrOutOfBoundsValue(value, lower, upper, fieldPath string) *FieldError {
+func ErrOutOfBoundsValue(value, lower, upper interface{}, fieldPath string) *FieldError {
 	return &FieldError{
-		Message: fmt.Sprintf("expected %s <= %s <= %s", lower, value, upper),
+		Message: fmt.Sprintf("expected %v <= %v <= %v", lower, value, upper),
 		Paths:   []string{fieldPath},
 	}
 }

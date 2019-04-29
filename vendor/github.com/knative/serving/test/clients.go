@@ -61,6 +61,10 @@ func NewClients(configPath string, clusterName string, namespace string) (*Clien
 		return nil, err
 	}
 
+	// We poll, so set our limits high.
+	cfg.QPS = 100
+	cfg.Burst = 200
+
 	clients.KubeClient, err = test.NewKubeClient(configPath, clusterName)
 	if err != nil {
 		return nil, err
@@ -127,6 +131,11 @@ func (clients *ServingClients) Delete(routes []string, configs []string, service
 		{clients.Services, services},
 	}
 
+	propPolicy := v1.DeletePropagationForeground
+	dopt := &v1.DeleteOptions{
+		PropagationPolicy: &propPolicy,
+	}
+
 	for _, deletion := range deletions {
 		if deletion.client == nil {
 			continue
@@ -137,7 +146,7 @@ func (clients *ServingClients) Delete(routes []string, configs []string, service
 				continue
 			}
 
-			if err := deletion.client.Delete(item, nil); err != nil {
+			if err := deletion.client.Delete(item, dopt); err != nil {
 				return err
 			}
 		}

@@ -18,15 +18,15 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/spf13/cobra"
-
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
+	"github.com/spf13/cobra"
 )
 
 func init() { Root.AddCommand(NewCmdDelete()) }
 
+// NewCmdDelete creates a new cobra.Command for the delete subcommand.
 func NewCmdDelete() *cobra.Command {
 	return &cobra.Command{
 		Use:   "delete",
@@ -48,7 +48,7 @@ func doDelete(_ *cobra.Command, args []string) {
 		log.Fatalf("getting creds for %q: %v", r, err)
 	}
 
-	if err := remote.Delete(r, auth, http.DefaultTransport, remote.DeleteOptions{}); err != nil {
+	if err := remote.Delete(r, auth, http.DefaultTransport); err != nil {
 		log.Fatalf("deleting image %q: %v", r, err)
 	}
 }

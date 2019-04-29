@@ -22,7 +22,6 @@ import (
 	"github.com/knative/pkg/kmeta"
 	"github.com/knative/serving/pkg/apis/serving"
 	"github.com/knative/serving/pkg/apis/serving/v1alpha1"
-	"github.com/knative/serving/pkg/reconciler/v1alpha1/configuration/resources/names"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -35,11 +34,10 @@ func MakeRevision(config *v1alpha1.Configuration, buildRef *corev1.ObjectReferen
 	}
 	// Populate the Namespace and Name.
 	rev.Namespace = config.Namespace
-	rev.Name = names.DeprecatedRevision(config)
+	rev.GenerateName = config.Name + "-"
 
 	UpdateRevisionLabels(rev, config)
 
-	// Populate the Configuration Generation annotation.
 	if rev.Annotations == nil {
 		rev.Annotations = make(map[string]string)
 	}
@@ -62,8 +60,8 @@ func UpdateRevisionLabels(rev *v1alpha1.Revision, config *v1alpha1.Configuration
 	for _, key := range []string{
 		serving.ConfigurationLabelKey,
 		serving.ServiceLabelKey,
-		serving.DeprecatedConfigurationGenerationLabelKey,
-		serving.ConfigurationMetadataGenerationLabelKey,
+		serving.ConfigurationGenerationLabelKey,
+		serving.DeprecatedConfigurationMetadataGenerationLabelKey,
 	} {
 		rev.Labels[key] = RevisionLabelValueForKey(key, config)
 	}
@@ -76,9 +74,9 @@ func RevisionLabelValueForKey(key string, config *v1alpha1.Configuration) string
 		return config.Name
 	case serving.ServiceLabelKey:
 		return config.Labels[serving.ServiceLabelKey]
-	case serving.DeprecatedConfigurationGenerationLabelKey:
-		return fmt.Sprintf("%d", config.Spec.Generation)
-	case serving.ConfigurationMetadataGenerationLabelKey:
+	case serving.ConfigurationGenerationLabelKey:
+		return fmt.Sprintf("%d", config.Generation)
+	case serving.DeprecatedConfigurationMetadataGenerationLabelKey:
 		return fmt.Sprintf("%d", config.Generation)
 	}
 

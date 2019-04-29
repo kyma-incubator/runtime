@@ -22,11 +22,14 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"net"
 	"net/http"
+	"time"
 
 	"github.com/google/go-containerregistry/pkg/authn/k8schain"
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -54,10 +57,25 @@ func newResolverTransport(path string) (*http.Transport, error) {
 	if crt, err := ioutil.ReadFile(path); err != nil {
 		return nil, err
 	} else if ok := pool.AppendCertsFromPEM(crt); !ok {
-		return nil, errors.New("Failed to append k8s cert bundle to cert pool.")
+		return nil, errors.New("failed to append k8s cert bundle to cert pool")
 	}
 
+	// Copied from https://github.com/golang/go/blob/release-branch.go1.12/src/net/http/transport.go#L42-L53
+	// We want to use the DefaultTransport but change its TLSClientConfig. There
+	// isn't a clean way to do this yet: https://github.com/golang/go/issues/26013
 	return &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
+		DialContext: (&net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+			DualStack: true,
+		}).DialContext,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ResponseHeaderTimeout: 10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+		// Use the cert pool with k8s cert bundle appended.
 		TLSClientConfig: &tls.Config{
 			RootCAs: pool,
 		},
@@ -68,8 +86,7 @@ func newResolverTransport(path string) (*http.Transport, error) {
 func (r *digestResolver) Resolve(
 	image string,
 	opt k8schain.Options,
-	registriesToSkip map[string]struct{},
-) (string, error) {
+	registriesToSkip sets.String) (string, error) {
 	kc, err := k8schain.New(r.client, opt)
 	if err != nil {
 		return "", err
@@ -85,7 +102,7 @@ func (r *digestResolver) Resolve(
 		return "", err
 	}
 
-	if _, ok := registriesToSkip[tag.Registry.RegistryStr()]; ok {
+	if registriesToSkip.Has(tag.Registry.RegistryStr()) {
 		return "", nil
 	}
 

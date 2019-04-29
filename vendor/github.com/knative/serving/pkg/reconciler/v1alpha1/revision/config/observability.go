@@ -19,12 +19,15 @@ package config
 import (
 	"fmt"
 	"strings"
+	"text/template"
 
 	corev1 "k8s.io/api/core/v1"
 )
 
 const (
 	ObservabilityConfigName = "config-observability"
+
+	defaultLogURLTemplate = "http://localhost:8001/api/v1/namespaces/knative-monitoring/services/kibana-logging/proxy/app/kibana#/discover?_a=(query:(match:(kubernetes.labels.knative-dev%2FrevisionUID:(query:'${REVISION_UID}',type:phrase))))"
 )
 
 // Observability contains the configuration defined in the observability ConfigMap.
@@ -33,7 +36,7 @@ type Observability struct {
 	// collect logs under /var/log/.
 	EnableVarLogCollection bool
 
-	// TODO(#818): Use the fluentd deamon set to collect /var/log.
+	// TODO(#818): Use the fluentd daemon set to collect /var/log.
 	// FluentdSidecarImage is the name of the image used for the fluentd sidecar
 	// injected into the revision pod. It is used only when enableVarLogCollection
 	// is true.
@@ -46,6 +49,13 @@ type Observability struct {
 	// LoggingURLTemplate is a string containing the logging url template where
 	// the variable REVISION_UID will be replaced with the created revision's UID.
 	LoggingURLTemplate string
+
+	// RequestLogTemplate is the go template to use to shape the request logs.
+	RequestLogTemplate string
+
+	// RequestMetricsBackend specifies the request metrics destination, e.g. Prometheus,
+	// Stackdriver.
+	RequestMetricsBackend string
 }
 
 // NewObservabilityFromConfigMap creates a Observability from the supplied ConfigMap
@@ -60,11 +70,27 @@ func NewObservabilityFromConfigMap(configMap *corev1.ConfigMap) (*Observability,
 		return nil, fmt.Errorf("Received bad Observability ConfigMap, want %q when %q is true",
 			"logging.fluentd-sidecar-image", "logging.enable-var-log-collection")
 	}
+
 	if fsoc, ok := configMap.Data["logging.fluentd-sidecar-output-config"]; ok {
 		oc.FluentdSidecarOutputConfig = fsoc
 	}
 	if rut, ok := configMap.Data["logging.revision-url-template"]; ok {
 		oc.LoggingURLTemplate = rut
+	} else {
+		oc.LoggingURLTemplate = defaultLogURLTemplate
 	}
+
+	if rlt, ok := configMap.Data["logging.request-log-template"]; ok {
+		// Verify that we get valid templates.
+		if _, err := template.New("requestLog").Parse(rlt); err != nil {
+			return nil, err
+		}
+		oc.RequestLogTemplate = rlt
+	}
+
+	if mb, ok := configMap.Data["metrics.request-metrics-backend-destination"]; ok {
+		oc.RequestMetricsBackend = mb
+	}
+
 	return oc, nil
 }

@@ -16,40 +16,43 @@ limitations under the License.
 
 package activator
 
+import (
+	"fmt"
+
+	"github.com/knative/serving/pkg/apis/networking"
+)
+
 const (
+	// Name is the name of the component.
+	Name = "activator"
 	// K8sServiceName is the name of the activator service
 	K8sServiceName = "activator-service"
-	// RequestCountHTTPHeader is the header key for number of tries
-	RequestCountHTTPHeader string = "knative-activator-num-retries"
 	// RevisionHeaderName is the header key for revision name
 	RevisionHeaderName string = "knative-serving-revision"
 	// RevisionHeaderNamespace is the header key for revision's namespace
 	RevisionHeaderNamespace string = "knative-serving-namespace"
+
+	// ServicePortHTTP1 is the port number for activating HTTP1 revisions
+	ServicePortHTTP1 int32 = 80
+	// ServicePortH2C is the port number for activating H2C revisions
+	ServicePortH2C int32 = 81
 )
 
-// Activator provides an active endpoint for a revision or an error and
-// status code indicating why it could not.
-type Activator interface {
-	ActiveEndpoint(namespace, name string) ActivationResult
-	Shutdown()
+// RevisionID is the combination of namespace and service name
+type RevisionID struct {
+	Namespace string
+	Name      string
 }
 
-type revisionID struct {
-	namespace string
-	name      string
+func (rev RevisionID) String() string {
+	return fmt.Sprintf("%s/%s", rev.Namespace, rev.Name)
 }
 
-// Endpoint is a fully-qualified domain name / port pair for an active revision.
-type Endpoint struct {
-	FQDN string
-	Port int32
-}
-
-// ActivationResult is used to return the result of an ActivateEndpoint call
-type ActivationResult struct {
-	Status            int
-	Endpoint          Endpoint
-	ServiceName       string
-	ConfigurationName string
-	Error             error
+// ServicePort returns the activator service port for the given app level protocol.
+// Default is `ServicePortHTTP1`.
+func ServicePort(protocol networking.ProtocolType) int32 {
+	if protocol == networking.ProtocolH2C {
+		return ServicePortH2C
+	}
+	return ServicePortHTTP1
 }

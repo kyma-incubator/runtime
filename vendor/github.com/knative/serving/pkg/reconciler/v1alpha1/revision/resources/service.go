@@ -19,6 +19,7 @@ package resources
 import (
 	"github.com/knative/pkg/kmeta"
 	"github.com/knative/serving/pkg/apis/autoscaling"
+	net "github.com/knative/serving/pkg/apis/networking"
 	"github.com/knative/serving/pkg/apis/serving"
 	"github.com/knative/serving/pkg/apis/serving/v1alpha1"
 	"github.com/knative/serving/pkg/reconciler/v1alpha1/revision/resources/names"
@@ -28,25 +29,16 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
-var (
-	servicePorts = []corev1.ServicePort{{
-		Name:       ServicePortName,
-		Protocol:   corev1.ProtocolTCP,
-		Port:       ServicePort,
-		TargetPort: intstr.FromString(v1alpha1.RequestQueuePortName),
-	}, {
-		Name:       MetricsPortName,
-		Protocol:   corev1.ProtocolTCP,
-		Port:       MetricsPort,
-		TargetPort: intstr.FromString(v1alpha1.RequestQueueMetricsPortName),
-	}}
-)
-
 // MakeK8sService creates a Kubernetes Service that targets all pods with the same
 // serving.RevisionLabelKey label. Traffic is routed to queue-proxy port.
 func MakeK8sService(rev *v1alpha1.Revision) *corev1.Service {
 	labels := makeLabels(rev)
-	labels[autoscaling.KPALabelKey] = names.KPA(rev)
+	// Set KPALabelKey label if KPA is used for this Revision. If ClassAnnotationKey
+	// is empty, default to KPA class for backward compatibility.
+	if pa, ok := rev.Annotations[autoscaling.ClassAnnotationKey]; !ok || pa == autoscaling.KPA {
+		labels[autoscaling.KPALabelKey] = names.KPA(rev)
+	}
+
 	return &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            names.K8sService(rev),
@@ -56,10 +48,28 @@ func MakeK8sService(rev *v1alpha1.Revision) *corev1.Service {
 			OwnerReferences: []metav1.OwnerReference{*kmeta.NewControllerRef(rev)},
 		},
 		Spec: corev1.ServiceSpec{
-			Ports: servicePorts,
+			Ports: []corev1.ServicePort{{
+				Name:       ServicePortName(rev),
+				Protocol:   corev1.ProtocolTCP,
+				Port:       ServicePort,
+				TargetPort: intstr.FromString(v1alpha1.RequestQueuePortName),
+			}, {
+				Name:       MetricsPortName,
+				Protocol:   corev1.ProtocolTCP,
+				Port:       MetricsPort,
+				TargetPort: intstr.FromString(v1alpha1.RequestQueueMetricsPortName),
+			}},
 			Selector: map[string]string{
 				serving.RevisionLabelKey: rev.Name,
 			},
 		},
 	}
+}
+
+// ServicePortName returns the port for the app level protocol.
+func ServicePortName(rev *v1alpha1.Revision) string {
+	if rev.GetProtocol() == net.ProtocolH2C {
+		return ServicePortNameH2C
+	}
+	return ServicePortNameHTTP1
 }

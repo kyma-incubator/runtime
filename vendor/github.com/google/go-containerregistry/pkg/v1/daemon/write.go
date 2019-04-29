@@ -19,22 +19,21 @@ import (
 	"io"
 	"io/ioutil"
 
-	"github.com/pkg/errors"
-
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
-
 	"github.com/google/go-containerregistry/pkg/name"
-	"github.com/google/go-containerregistry/pkg/v1"
+	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
+	"github.com/pkg/errors"
 )
 
-// API interface for testing.
+// ImageLoader is an interface for testing.
 type ImageLoader interface {
 	ImageLoad(context.Context, io.Reader, bool) (types.ImageLoadResponse, error)
+	ImageTag(context.Context, string, string) error
 }
 
-// This is a variable so we can override in tests.
+// GetImageLoader is a variable so we can override in tests.
 var GetImageLoader = func() (ImageLoader, error) {
 	cli, err := client.NewEnvClient()
 	if err != nil {
@@ -44,14 +43,18 @@ var GetImageLoader = func() (ImageLoader, error) {
 	return cli, nil
 }
 
-// WriteOptions are used to expose optional information to guide or
-// control the image write.
-type WriteOptions struct {
-	// TODO(dlorenc): What kinds of knobs does the daemon expose?
+// Tag adds a tag to an already existent image.
+func Tag(src, dest name.Tag) error {
+	cli, err := GetImageLoader()
+	if err != nil {
+		return err
+	}
+
+	return cli.ImageTag(context.Background(), src.String(), dest.String())
 }
 
 // Write saves the image into the daemon as the given tag.
-func Write(tag name.Tag, img v1.Image, wo WriteOptions) (string, error) {
+func Write(tag name.Tag, img v1.Image) (string, error) {
 	cli, err := GetImageLoader()
 	if err != nil {
 		return "", err
@@ -59,7 +62,7 @@ func Write(tag name.Tag, img v1.Image, wo WriteOptions) (string, error) {
 
 	pr, pw := io.Pipe()
 	go func() {
-		pw.CloseWithError(tarball.Write(tag, img, &tarball.WriteOptions{}, pw))
+		pw.CloseWithError(tarball.Write(tag, img, pw))
 	}()
 
 	// write the image in docker save format first, then load it
