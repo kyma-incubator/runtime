@@ -7,95 +7,32 @@
 ```
 make test
 ```
-### Setup development environment
+### Setup development environment (mac)
 
-- Create a secret for docker-registry
-
-```
-apiVersion: v1
-kind: Secret
-metadata:
-  name: docker-reg-credential
-  annotations:
-    build.knative.dev/docker-0: https://index.docker.io/v1/
-type: kubernetes.io/basic-auth
-data:
-  # Use 'echo -n "username" | base64' to generate this string
-  username: <>
-  # Use 'echo -n "password" | base64' to generate this string
-  password: <>
+start a beefy minikube
+```@sh
+minikube start --memory=12288 --cpus=4 \\n  --kubernetes-version=v1.12.0 \\n  --vm-driver=hyperkit \\n  --disk-size=30g \\n  --extra-config=apiserver.enable-admission-plugins="LimitRanger,NamespaceExists,NamespaceLifecycle,ResourceQuota,ServiceAccount,DefaultStorageClass,MutatingAdmissionWebhook"
 ```
 
-- Create a service account for the above secret
-
+install istio
 ```
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: build-bot
-secrets:
-- name: docker-reg-credential
+kubectl apply --filename https://raw.githubusercontent.com/knative/serving/v0.5.2/third_party/istio-1.0.7/istio-crds.yaml &&\ncurl -L https://raw.githubusercontent.com/knative/serving/v0.5.2/third_party/istio-1.0.7/istio.yaml \\n  | sed 's/LoadBalancer/NodePort/' \\n  | kubectl apply --filename -
 ```
 
-- Create configmaps for Dockerfiles supporting the programming languages which are nodejs6 and nodejs8 as of now
-
+install knative
 ```
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  labels:
-    function: runtime-function-controller
-  name: dockerfileNodejs6
-data:
-  Dockerfile: |-
-    FROM kubeless/nodejs@sha256:5c3c21cf29231f25a0d7d2669c6f18c686894bf44e975fcbbbb420c6d045f7e7
-    USER root
-    RUN export KUBELESS_INSTALL_VOLUME='/kubeless' && \
-        mkdir /kubeless && \
-        cp /src/handler.js /kubeless && \
-        cp /src/package.json /kubeless && \
-        /kubeless-npm-install.sh
-    USER 1000
+kubectl apply --selector knative.dev/crd-install=true \\n--filename https://github.com/knative/serving/releases/download/v0.5.2/serving.yaml \\n--filename https://github.com/knative/build/releases/download/v0.5.0/build.yaml \\n--filename https://github.com/knative/eventing/releases/download/v0.5.0/release.yaml \\n--filename https://github.com/knative/eventing-sources/releases/download/v0.5.0/eventing-sources.yaml \\n--filename https://github.com/knative/serving/releases/download/v0.5.2/monitoring.yaml \\n--filename https://raw.githubusercontent.com/knative/serving/v0.5.2/third_party/config/build/clusterrole.yaml
 ```
 
+install knative part2
 ```
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  labels:
-    function: runtime-function-controller
-  name: dockerfile-nodejs-8
-data:
-  Dockerfile: |-
-    FROM kubeless/nodejs@sha256:5c3c21cf29231f25a0d7d2669c6f18c686894bf44e975fcbbbb420c6d045f7e7
-    USER root
-    RUN export KUBELESS_INSTALL_VOLUME='/kubeless' && \
-        mkdir /kubeless && \
-        cp /src/handler.js /kubeless && \
-        cp /src/package.json /kubeless && \
-        /kubeless-npm-install.sh
-    USER 1000
+kubectl apply --filename https://github.com/knative/serving/releases/download/v0.5.2/serving.yaml \\n--filename https://github.com/knative/build/releases/download/v0.5.0/build.yaml \\n--filename https://github.com/knative/eventing/releases/download/v0.5.0/release.yaml \\n--filename https://github.com/knative/eventing-sources/releases/download/v0.5.0/eventing-sources.yaml \\n--filename https://github.com/knative/serving/releases/download/v0.5.2/monitoring.yaml \\n--filename https://raw.githubusercontent.com/knative/serving/v0.5.2/third_party/config/build/clusterrole.yaml
 ```
 
-- Create the following configmap which serves as configuration for the runtime controller
+modify config/samples/config.yaml to include your docker.io credentials (base64 encoded)
+apply the configuration
 
-```
-apiVersion: v1
-data:
-  dockerRegistry: <>  ### dockerhub handle
-  runtimes: |
-    - ID: nodesjs8
-      dockerFileName: dockerfile-nodejs-8
-    - ID: nodejs6
-      dockerFileName: dockerfile-nodejs-6
-  serviceAccountName: runtime-controller
-kind: ConfigMap
-metadata:
-  labels:
-    app: kubeless
-  name: runtime-controller-config
-```
-
+`kubectl apply -f config/samples/config.yaml`
 
 #### Install the CRD to a local Kubernetes cluster
 
@@ -117,4 +54,14 @@ make docker-build IMG=<img-name>
 
 ```
 make docker-push IMG=<img-name>
+```
+
+#### Run the examples
+```
+kubectl apply -f config/samples/runtime_v1alpha1_function.yaml
+```
+
+access the function
+```
+curl -v -H "Host: $(kubectl get ksvc sample --no-headers | awk '{print $2}')" http://$(minikube ip):$(kubectl get svc istio-ingressgateway --namespace istio-system --output 'jsonpath={.spec.ports[?(@.port==80)].nodePort}')
 ```
