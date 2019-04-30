@@ -11,22 +11,40 @@ make test
 
 start a beefy minikube
 ```@sh
-minikube start --memory=12288 --cpus=4 \\n  --kubernetes-version=v1.12.0 \\n  --vm-driver=hyperkit \\n  --disk-size=30g \\n  --extra-config=apiserver.enable-admission-plugins="LimitRanger,NamespaceExists,NamespaceLifecycle,ResourceQuota,ServiceAccount,DefaultStorageClass,MutatingAdmissionWebhook"
+minikube start \
+  --memory=12288 \
+  --cpus=4 \
+  --kubernetes-version=v1.12.0 \
+  --vm-driver=hyperkit \
+  --disk-size=30g \
+  --extra-config=apiserver.enable-admission-plugins="LimitRanger,NamespaceExists,NamespaceLifecycle,ResourceQuota,ServiceAccount,DefaultStorageClass,MutatingAdmissionWebhook"
 ```
 
 install istio
 ```
-kubectl apply --filename https://raw.githubusercontent.com/knative/serving/v0.5.2/third_party/istio-1.0.7/istio-crds.yaml &&\ncurl -L https://raw.githubusercontent.com/knative/serving/v0.5.2/third_party/istio-1.0.7/istio.yaml \\n  | sed 's/LoadBalancer/NodePort/' \\n  | kubectl apply --filename -
+kubectl apply \
+  --filename https://raw.githubusercontent.com/knative/serving/v0.5.2/third_party/istio-1.0.7/istio-crds.yaml &&
+curl -L https://raw.githubusercontent.com/knative/serving/v0.5.2/third_party/istio-1.0.7/istio.yaml \
+  | sed 's/LoadBalancer/NodePort/' \
+  | kubectl apply --filename -
 ```
 
 install knative
 ```
-kubectl apply --selector knative.dev/crd-install=true \\n--filename https://github.com/knative/serving/releases/download/v0.5.2/serving.yaml \\n--filename https://github.com/knative/build/releases/download/v0.5.0/build.yaml \\n--filename https://github.com/knative/eventing/releases/download/v0.5.0/release.yaml \\n--filename https://github.com/knative/eventing-sources/releases/download/v0.5.0/eventing-sources.yaml \\n--filename https://github.com/knative/serving/releases/download/v0.5.2/monitoring.yaml \\n--filename https://raw.githubusercontent.com/knative/serving/v0.5.2/third_party/config/build/clusterrole.yaml
+kubectl apply \
+  --selector knative.dev/crd-install=true \
+  --filename https://github.com/knative/serving/releases/download/v0.5.2/serving.yaml \
+  --filename https://github.com/knative/build/releases/download/v0.5.0/build.yaml \
+  --filename https://github.com/knative/serving/releases/download/v0.5.2/monitoring.yaml \
+  --filename https://raw.githubusercontent.com/knative/serving/v0.5.2/third_party/config/build/clusterrole.yaml
 ```
 
 install knative part2
 ```
-kubectl apply --filename https://github.com/knative/serving/releases/download/v0.5.2/serving.yaml \\n--filename https://github.com/knative/build/releases/download/v0.5.0/build.yaml \\n--filename https://github.com/knative/eventing/releases/download/v0.5.0/release.yaml \\n--filename https://github.com/knative/eventing-sources/releases/download/v0.5.0/eventing-sources.yaml \\n--filename https://github.com/knative/serving/releases/download/v0.5.2/monitoring.yaml \\n--filename https://raw.githubusercontent.com/knative/serving/v0.5.2/third_party/config/build/clusterrole.yaml
+kubectl apply --filename https://github.com/knative/serving/releases/download/v0.5.2/serving.yaml \
+--filename https://github.com/knative/build/releases/download/v0.5.0/build.yaml \
+--filename https://github.com/knative/serving/releases/download/v0.5.2/monitoring.yaml \
+--filename https://raw.githubusercontent.com/knative/serving/v0.5.2/third_party/config/build/clusterrole.yaml
 ```
 
 modify config/samples/config.yaml to include your docker.io credentials (base64 encoded)
