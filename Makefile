@@ -46,8 +46,11 @@ vet:
 	go vet ./pkg/... ./cmd/...
 
 # Generate code
-generate:
+generate: dep
 	go generate ./pkg/... ./cmd/...
+
+dep:
+	dep ensure --vendor-only
 
 # Build the docker image
 # docker-build: test
