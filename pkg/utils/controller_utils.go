@@ -63,7 +63,7 @@ func (ri *RuntimeInfo) DockerFileConfigMapName(runtime string) string {
 			break
 		}
 	}
-	if runtime == "" {
+	if result == "" {
 		log.Info("Unable to find the docker file for runtime: %v", runtime)
 	}
 	return result

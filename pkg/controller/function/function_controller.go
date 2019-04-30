@@ -97,7 +97,6 @@ type ReconcileFunction struct {
 // +kubebuilder:rbac:groups=runtime.kyma-project.io,resources=functions,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=runtime.kyma-project.io,resources=functions/status,verbs=get;update;patch
 func (r *ReconcileFunction) Reconcile(request reconcile.Request) (reconcile.Result, error) {
-
 	fnConfigName := "fn-config"
 	fnConfigNamespace := "default"
 	fnConfigNameEnv := os.Getenv("CONTROLLER_CONFIGMAP")
@@ -175,13 +174,17 @@ func (r *ReconcileFunction) Reconcile(request reconcile.Request) (reconcile.Resu
 			return reconcile.Result{}, err
 		}
 	}
-
+	err = r.Get(context.TODO(), types.NamespacedName{Name: deployCm.Name, Namespace: deployCm.Namespace}, foundCm)
+	if err != nil {
+		log.Error(err, "namespace", deployCm.Namespace, "name", deployCm.Name)
+	}
+	cmVersion := foundCm.GetObjectMeta().GetResourceVersion()
+	log.Info("Configmap version", "version", cmVersion)
 	// Managing a resource of type Service.serving.knative.dev
 
 	dockerRegistry := rnInfo.RegistryInfo
-	// randomStr := uuid.NewRandom().String()[:8]
-	randomStr := "latest"
-	imageName := fmt.Sprintf("%s/%s-%s:%s", dockerRegistry, fn.Namespace, fn.Name, randomStr)
+	imageName := fmt.Sprintf("%s/%s-%s:%s", dockerRegistry, fn.Namespace, fn.Name, cmVersion)
+	log.Info("image name", "name:", imageName)
 	deployService := &servingv1alpha1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels:    fn.Labels,
