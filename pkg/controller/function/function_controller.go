@@ -115,7 +115,7 @@ func (r *ReconcileFunction) Reconcile(request reconcile.Request) (reconcile.Resu
 
 	if err != nil {
 		log.Error(err, "Unable to read Function controller config: %v from Namespace: %v", fnConfigName, fnConfigNamespace)
-		return reconcile.Result{}, 
+		return reconcile.Result{}, err
 	}
 
 	rnInfo, err := runtimeUtil.New(fnConfig)
