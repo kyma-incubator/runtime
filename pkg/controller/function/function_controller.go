@@ -97,13 +97,16 @@ type ReconcileFunction struct {
 // +kubebuilder:rbac:groups=runtime.kyma-project.io,resources=functions,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=runtime.kyma-project.io,resources=functions/status,verbs=get;update;patch
 func (r *ReconcileFunction) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+
 	fnConfigName := "fn-config"
 	fnConfigNamespace := "default"
 	fnConfigNameEnv := os.Getenv("CONTROLLER_CONFIGMAP")
 	fnConfigNamespaceEnv := os.Getenv("CONTROLLER_CONFIGMAP_NS")
+
 	if len(fnConfigNameEnv) > 0 {
 		fnConfigName = fnConfigNameEnv
 	}
+
 	if len(fnConfigNamespaceEnv) > 0 {
 		fnConfigNamespace = fnConfigNamespaceEnv
 	}
@@ -111,8 +114,8 @@ func (r *ReconcileFunction) Reconcile(request reconcile.Request) (reconcile.Resu
 	err := r.Get(context.TODO(), types.NamespacedName{Name: fnConfigName, Namespace: fnConfigNamespace}, fnConfig)
 
 	if err != nil {
-		log.Info("Unable to read Function controller config: %v from Namespace: %v", fnConfigName, fnConfigNamespace)
-		return reconcile.Result{}, err
+		log.Error(err, "Unable to read Function controller config: %v from Namespace: %v", fnConfigName, fnConfigNamespace)
+		return reconcile.Result{}, 
 	}
 
 	rnInfo, err := runtimeUtil.New(fnConfig)
@@ -210,6 +213,7 @@ func (r *ReconcileFunction) Reconcile(request reconcile.Request) (reconcile.Resu
 		fmt.Printf("Error while creating: %v", err)
 		return reconcile.Result{}, err
 	}
+
 	if !reflect.DeepEqual(deployService.Spec, foundService.Spec) {
 		foundService.Spec = deployService.Spec
 		log.Info("Updating Service", "namespace", deployService.Namespace, "name", deployService.Name)

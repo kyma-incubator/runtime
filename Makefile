@@ -8,6 +8,9 @@ all: test manager
 test: generate fmt vet
 	go test -v ./pkg/... ./cmd/... -coverprofile cover.out
 
+qt:
+	go test -v ./pkg/... ./cmd/... -coverprofile cover.out
+
 # Build manager binary
 manager: generate fmt vet
 	go build -o bin/manager github.com/kyma-incubator/function-controller/cmd/manager

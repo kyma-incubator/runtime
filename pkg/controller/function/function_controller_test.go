@@ -18,6 +18,7 @@ package function
 
 import (
 	"encoding/json"
+	"os"
 	"testing"
 	"time"
 
@@ -30,6 +31,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -44,13 +46,13 @@ const timeout = time.Second * 10
 
 func TestReconcile(t *testing.T) {
 	g := gomega.NewGomegaWithT(t)
-	fn := &runtimev1alpha1.Function{
+	fnCreated := &runtimev1alpha1.Function{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "foo",
 			Namespace: "default",
 		},
 		Spec: runtimev1alpha1.FunctionSpec{
-			Function:            "main() {}",
+			Function:            "main() {asdfasdf}",
 			FunctionContentType: "plaintext",
 			Size:                "L",
 			Runtime:             "nodejs6",
@@ -149,13 +151,12 @@ func TestReconcile(t *testing.T) {
 		return
 	}
 
-	err = c.Create(context.TODO(), fn)
+	err = c.Create(context.TODO(), fnCreated)
 	if apierrors.IsInvalid(err) {
 		t.Logf("failed to create object, got an invalid object error: %v", err)
 		return
 	}
 	g.Expect(err).NotTo(gomega.HaveOccurred())
-	defer c.Delete(context.TODO(), fn)
 
 	g.Eventually(requests, timeout).Should(gomega.Receive(gomega.Equal(expectedRequest)))
 
@@ -190,47 +191,121 @@ func TestReconcile(t *testing.T) {
 	g.Expect(buildSpec.ServiceAccountName).To(gomega.Equal("build-bot"))
 	g.Expect(service.Spec.RunLatest.Configuration.RevisionTemplate.Spec.Container.Image).To(gomega.HavePrefix("test/default-foo"))
 
-	g.Eventually(func() error { return c.Get(context.TODO(), depKey, fn) }, timeout).Should(gomega.Succeed())
-	fn.Spec.Function = `main() {return "bla"}`
-	g.Expect(c.Update(context.TODO(), fn)).NotTo(gomega.HaveOccurred())
-	g.Eventually(func() error { return c.Get(context.TODO(), depKey, fn) }, timeout).Should(gomega.Succeed())
-	g.Expect(fn.Spec.Function).To(gomega.Equal(`main() {return "bla"}`))
+	fnFetched := &runtimev1alpha1.Function{}
+	g.Expect(c.Get(context.TODO(), depKey, fnFetched)).NotTo(gomega.HaveOccurred())
+	g.Expect(fnFetched.Spec).To(gomega.Equal(fnCreated.Spec))
 
-	// fnWithReducedParams := &runtimev1alpha1.Function{
-	// 	ObjectMeta: metav1.ObjectMeta{
-	// 		Name:      "foo-reduced",
-	// 		Namespace: "default",
-	// 	},
-	// 	Spec: runtimev1alpha1.FunctionSpec{
-	// 		Function:            "main() {}",
-	// 		FunctionContentType: "plaintext",
-	// 	},
-	// }
-	// err = c.Create(context.TODO(), fnWithReducedParams)
-	// if apierrors.IsInvalid(err) {
-	// 	t.Logf("failed to create object, got an invalid object error: %v", err)
-	// 	return
-	// }
-	// defer c.Delete(context.TODO(), fnWithReducedParams)
-	// cmReduced := &corev1.ConfigMap{
-	// 	ObjectMeta: metav1.ObjectMeta{Name: "foo-reduced", Namespace: "default"},
-	// }
+	fnUpdated := fnFetched.DeepCopy()
+	fnUpdated.Spec.Function = `main() {return "bla"}`
+	fnUpdated.Spec.Deps = `dependencies`
 
-	// g.Eventually(func() error {
-	// 	return c.Get(context.TODO(), types.NamespacedName{Name: "foo-reduced", Namespace: "default"}, cmReduced)
-	// }, timeout).
-	// 	Should(gomega.Succeed())
-	// Delete the Deployment and expect Reconcile to be called for Deployment deletion
-	// c.Delete(context.TODO(), fn)
-	// g.Expect(c.Get(context.TODO(), depKey, cm)).NotTo(gomega.HaveOccurred())
-	// g.Expect(c.Get(context.TODO(), depKey, service)).NotTo(gomega.HaveOccurred())
-	// g.Eventually(func() error { return c.Get(context.TODO(), depKey, service) }, timeout).
-	// 	Should(gomega.Succeed())
-	// g.Eventually(requests, timeout).Should(gomega.Receive(gomega.Equal(expectedRequest)))
-	// g.Eventually(func() error { return c.Get(context.TODO(), depKey, cm) }, timeout).
-	// 	Should(gomega.Succeed())
+	fnFetched = &runtimev1alpha1.Function{}
+	g.Expect(c.Update(context.TODO(), fnUpdated)).NotTo(gomega.HaveOccurred())
+	g.Expect(c.Get(context.TODO(), depKey, fnFetched)).NotTo(gomega.HaveOccurred())
+	g.Expect(fnFetched.Spec).To(gomega.Equal(fnUpdated.Spec))
 
-	// Manually delete Deployment since GC isn't enabled in the test control plane
-	// g.Expect(c.Delete(context.TODO(), cm)).To(gomega.Succeed())
+	g.Eventually(requests, timeout).Should(gomega.Receive(gomega.Equal(expectedRequest)))
+
+	cmUpdated := &corev1.ConfigMap{}
+	g.Eventually(func() string {
+		c.Get(context.TODO(), depKey, cmUpdated)
+		return cmUpdated.Data["handler.js"]
+	}, timeout, 1*time.Second).Should(gomega.Equal(fnUpdated.Spec.Function))
+	g.Eventually(func() string {
+		c.Get(context.TODO(), depKey, cmUpdated)
+		return cmUpdated.Data["package.json"]
+	}, timeout, 1*time.Second).Should(gomega.Equal(`dependencies`))
+}
+
+func TestReconcileErrors(t *testing.T) {
+	g := gomega.NewGomegaWithT(t)
+	fnCreated := &runtimev1alpha1.Function{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "errortest",
+			Namespace: "default",
+		},
+		Spec: runtimev1alpha1.FunctionSpec{
+			Function:            "main() {asdfasdf}",
+			FunctionContentType: "plaintext",
+			Size:                "L",
+			Runtime:             "nodejs6",
+		},
+	}
+
+	fnConfig := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "fn-config",
+			Namespace: "default",
+		},
+		Data: map[string]string{
+			"dockerRegistry":     "test",
+			"serviceAccountName": "build-bot",
+			"runtimes": `[
+				{
+					"ID": "nodejs8",
+					"DockerFileName": "dockerfile-nodejs8",
+				}
+			]`,
+		},
+	}
+
+	dockerFileConfigNodejs := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "dockerfile-nodejs8",
+			Namespace: "default",
+		},
+		Data: map[string]string{
+			"Dockerfile": `FROM kubeless/nodejs@sha256:5c3c21cf29231f25a0d7d2669c6f18c686894bf44e975fcbbbb420c6d045f7e7
+				USER root
+				RUN export KUBELESS_INSTALL_VOLUME='/kubeless' && \
+					mkdir /kubeless && \
+					cp /src/handler.js /kubeless && \
+					cp /src/package.json /kubeless && \
+					/kubeless-npm-install.sh
+				USER 1000
+			`,
+		},
+	}
+
+	mgr, err := manager.New(cfg, manager.Options{})
+	g.Expect(err).NotTo(gomega.HaveOccurred())
+	c = mgr.GetClient()
+
+	// Create the Function object and expect the Reconcile and Deployment to be created
+	err = c.Create(context.TODO(), dockerFileConfigNodejs)
+	if apierrors.IsInvalid(err) {
+		t.Logf("failed to create object, got an invalid object error: %v", err)
+		return
+	}
+
+	err = c.Create(context.TODO(), fnConfig)
+	if apierrors.IsInvalid(err) {
+		t.Logf("failed to create object, got an invalid object error: %v", err)
+		return
+	}
+
+	err = c.Create(context.TODO(), fnCreated)
+	t.Logf("%+v", err)
+	g.Expect(err).NotTo(gomega.HaveOccurred())
+	request := reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      "bla",
+			Namespace: "blabla",
+		},
+	}
+	s := scheme.Scheme
+	s.AddKnownTypes(runtimev1alpha1.SchemeGroupVersion, fnCreated)
+	r := &ReconcileFunction{Client: c, scheme: s}
+
+	os.Setenv("CONTROLLER_CONFIGMAP", "bla-config")
+	_, err = r.Reconcile(request)
+	g.Expect(err).To(gomega.HaveOccurred())
+	g.Expect(err.Error()).To(gomega.Equal(`ConfigMap "bla-config" not found`))
+
+	os.Unsetenv("CONTROLLER_CONFIGMAP")
+	os.Setenv("CONTROLLER_CONFIGMAP_NS", "stage")
+	_, err = r.Reconcile(request)
+	g.Expect(err).To(gomega.HaveOccurred())
+	g.Expect(err.Error()).To(gomega.Equal(`ConfigMap "fn-config" not found`))
 
 }
