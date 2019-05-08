@@ -187,7 +187,6 @@ func (r *ReconcileFunction) Reconcile(request reconcile.Request) (reconcile.Resu
 
 	dockerRegistry := rnInfo.RegistryInfo
 	imageName := fmt.Sprintf("%s/%s-%s:%s", dockerRegistry, fn.Namespace, fn.Name, cmVersion)
-	log.Info("image name", "name:", imageName)
 	deployService := &servingv1alpha1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels:    fn.Labels,
