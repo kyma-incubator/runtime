@@ -215,6 +215,10 @@ func TestReconcile(t *testing.T) {
 		c.Get(context.TODO(), depKey, cmUpdated)
 		return cmUpdated.Data["package.json"]
 	}, timeout, 1*time.Second).Should(gomega.Equal(`dependencies`))
+
+	ksvcUpdated := &servingv1alpha1.Service{}
+	g.Expect(c.Get(context.TODO(), depKey, ksvcUpdated)).NotTo(gomega.HaveOccurred())
+	g.Expect(ksvcUpdated.Spec.RunLatest.Configuration.RevisionTemplate.Spec.Container.Image).To(gomega.Equal(fmt.Sprintf("%s-%s:%s", "default", "foo", cm.GetObjectMeta().GetResourceVersion())
 }
 
 func TestReconcileErrors(t *testing.T) {
