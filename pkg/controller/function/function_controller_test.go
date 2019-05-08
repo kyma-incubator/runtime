@@ -17,6 +17,7 @@ limitations under the License.
 package function
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -219,8 +220,13 @@ func TestReconcile(t *testing.T) {
 
 	ksvcUpdated := &servingv1alpha1.Service{}
 	g.Expect(c.Get(context.TODO(), depKey, ksvcUpdated)).NotTo(gomega.HaveOccurred())
+
+	hash := sha256.New()
+	hash.Write([]byte(cmUpdated.Data["handler.js"] + cmUpdated.Data["package.json"]))
+	functionSha := fmt.Sprintf("%x", hash.Sum(nil))
+
 	g.Expect(ksvcUpdated.Spec.RunLatest.Configuration.RevisionTemplate.Spec.Container.Image).
-		To(gomega.Equal(fmt.Sprintf("test/%s-%s:%s", "default", "foo", cmUpdated.GetObjectMeta().GetResourceVersion())))
+		To(gomega.Equal(fmt.Sprintf("test/%s-%s:%s", "default", "foo", functionSha)))
 }
 
 func TestReconcileErrors(t *testing.T) {

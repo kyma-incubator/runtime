@@ -18,6 +18,7 @@ package function
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"os"
 	"reflect"
@@ -181,12 +182,12 @@ func (r *ReconcileFunction) Reconcile(request reconcile.Request) (reconcile.Resu
 	if err != nil {
 		log.Error(err, "namespace", deployCm.Namespace, "name", deployCm.Name)
 	}
-	cmVersion := foundCm.GetObjectMeta().GetResourceVersion()
-	log.Info("Configmap version", "version", cmVersion)
-	// Managing a resource of type Service.serving.knative.dev
+	hash := sha256.New()
+	hash.Write([]byte(foundCm.Data["handler.js"] + foundCm.Data["package.json"]))
+	functionSha := fmt.Sprintf("%x", hash.Sum(nil))
 
 	dockerRegistry := rnInfo.RegistryInfo
-	imageName := fmt.Sprintf("%s/%s-%s:%s", dockerRegistry, fn.Namespace, fn.Name, cmVersion)
+	imageName := fmt.Sprintf("%s/%s-%s:%s", dockerRegistry, fn.Namespace, fn.Name, functionSha)
 	deployService := &servingv1alpha1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels:    fn.Labels,
