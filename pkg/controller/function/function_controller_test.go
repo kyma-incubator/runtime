@@ -18,6 +18,7 @@ package function
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -218,7 +219,8 @@ func TestReconcile(t *testing.T) {
 
 	ksvcUpdated := &servingv1alpha1.Service{}
 	g.Expect(c.Get(context.TODO(), depKey, ksvcUpdated)).NotTo(gomega.HaveOccurred())
-	g.Expect(ksvcUpdated.Spec.RunLatest.Configuration.RevisionTemplate.Spec.Container.Image).To(gomega.Equal(fmt.Sprintf("%s-%s:%s", "default", "foo", cm.GetObjectMeta().GetResourceVersion())
+	g.Expect(ksvcUpdated.Spec.RunLatest.Configuration.RevisionTemplate.Spec.Container.Image).
+		To(gomega.Equal(fmt.Sprintf("test/%s-%s:%s", "default", "foo", cmUpdated.GetObjectMeta().GetResourceVersion())))
 }
 
 func TestReconcileErrors(t *testing.T) {
