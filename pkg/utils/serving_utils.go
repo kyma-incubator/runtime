@@ -87,7 +87,6 @@ func GetServiceSpec(imageName string, fn runtimev1alpha1.Function, rnInfo *Runti
 						Container: corev1.Container{
 							Image: imageName,
 							Env:   envVarsForRevision,
-							Name:  fn.Name,
 						},
 					},
 				},
