@@ -47,7 +47,8 @@ kubectl apply --filename https://github.com/knative/serving/releases/download/v0
 --filename https://raw.githubusercontent.com/knative/serving/v0.5.2/third_party/config/build/clusterrole.yaml
 ```
 
-modify config/samples/config.yaml to include your docker.io credentials (base64 encoded)
+modify config/samples/config.yaml to include your docker.io credentials (base64 encoded) and update the dockerregistry value to your docker.io username
+
 apply the configuration
 
 `kubectl apply -f config/samples/config.yaml`
