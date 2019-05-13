@@ -8,6 +8,9 @@ all: test manager
 test: generate fmt vet
 	go test -v ./pkg/... ./cmd/... -coverprofile cover.out
 
+qt:
+	go test -v ./pkg/... ./cmd/... -coverprofile cover.out
+
 # Build manager binary
 manager: generate fmt vet
 	go build -o bin/manager github.com/kyma-incubator/function-controller/cmd/manager
@@ -17,7 +20,7 @@ run: generate fmt vet
 	go run ./cmd/manager/main.go
 
 # Install CRDs into a cluster
-install:
+install: 
 	kubectl apply -f config/crds/runtime_v1alpha1_function.yaml
 
 # CreateResource creates a resource in the cluster
@@ -46,16 +49,21 @@ vet:
 	go vet ./pkg/... ./cmd/...
 
 # Generate code
-generate:
+generate: dep
 	go generate ./pkg/... ./cmd/...
+
+dep:
+	dep ensure --vendor-only
 
 # Build the docker image
 # docker-build: test
+.PHONY: docker-build
 docker-build:
 	docker build . -t ${IMG}
 	@echo "updating kustomize image patch file for manager resource"
 	sed -i'' -e 's@image: .*@image: '"${IMG}"'@' ./config/default/manager_image_patch.yaml
 
 # Push the docker image
-docker-push:
+.PHONY: docker-push
+docker-push: docker-build
 	docker push ${IMG}

@@ -3,12 +3,16 @@ package utils_test
 import (
 	"testing"
 
+	"github.com/onsi/gomega"
+
 	"github.com/kyma-incubator/runtime/pkg/utils"
 
 	corev1 "k8s.io/api/core/v1"
 )
 
 func TestNewRuntimeInfo(t *testing.T) {
+
+	g := gomega.NewGomegaWithT(t)
 	cm := &corev1.ConfigMap{
 		Data: map[string]string{
 			"serviceAccountName": "test",
@@ -16,19 +20,40 @@ func TestNewRuntimeInfo(t *testing.T) {
 		},
 	}
 	ri, err := utils.New(cm)
-	if err != nil {
-		t.Fatalf("Error creating a new runtime object: %v", err)
-	}
-	if ri.ServiceAccount != "test" {
-		t.Fatalf("Expected: %s Got: %s", "test", ri.ServiceAccount)
-	}
+	g.Expect(err).NotTo(gomega.HaveOccurred())
+	g.Expect(ri.ServiceAccount).To(gomega.Equal("test"))
+	g.Expect(ri.RegistryInfo).To(gomega.Equal("foo"))
 
-	if ri.RegistryInfo != "foo" {
-		t.Fatalf("Expected: %s Got: %s", "foo", ri.RegistryInfo)
+	cmBroken := &corev1.ConfigMap{
+		Data: map[string]string{
+			"serviceAccountName": "test",
+		},
 	}
+	_, err = utils.New(cmBroken)
+	g.Expect(err.Error()).To(gomega.Equal("Error while fetching docker registry info from configmap"))
+
+	cmBroken = &corev1.ConfigMap{
+		Data: map[string]string{
+			"dockerRegistry": "foo",
+		},
+	}
+	_, err = utils.New(cmBroken)
+	g.Expect(err.Error()).To(gomega.Equal("Error while fetching serviceAccountName"))
+
+	cmBroken = &corev1.ConfigMap{
+		Data: map[string]string{
+			"serviceAccountName": "test",
+			"dockerRegistry":     "foo",
+			"runtimes":           "foo",
+		},
+	}
+	_, err = utils.New(cmBroken)
+	g.Expect(err.Error()).To(gomega.ContainSubstring("unmarshal"))
+
 }
 
 func TestDockerFileConfigMapName(t *testing.T) {
+	g := gomega.NewGomegaWithT(t)
 	runtime := "nodejs8"
 	cm := &corev1.ConfigMap{
 		Data: map[string]string{
@@ -43,11 +68,9 @@ func TestDockerFileConfigMapName(t *testing.T) {
 		},
 	}
 	ri, err := utils.New(cm)
-	if err != nil {
-		t.Fatalf("Error creating runtime info obj: %v", err)
-	}
+	g.Expect(err).NotTo(gomega.HaveOccurred())
 	dockerFileCMName := ri.DockerFileConfigMapName(runtime)
-	if dockerFileCMName != "dockerfile-nodejs8" {
-		t.Fatalf("Expected: %s Got: %s", "dockerfile-nodejs8", dockerFileCMName)
-	}
+	g.Expect(dockerFileCMName).To(gomega.Equal("dockerfile-nodejs8"))
+	dockerFileCMName = ri.DockerFileConfigMapName("foo")
+	g.Expect(dockerFileCMName).To(gomega.Equal(""))
 }

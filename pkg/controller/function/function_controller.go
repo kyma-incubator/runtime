@@ -18,6 +18,7 @@ package function
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"os"
 	"reflect"
@@ -25,7 +26,6 @@ import (
 
 	servingv1alpha1 "github.com/knative/serving/pkg/apis/serving/v1alpha1"
 	runtimev1alpha1 "github.com/kyma-incubator/runtime/pkg/apis/runtime/v1alpha1"
-	"github.com/pborman/uuid"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -103,9 +103,11 @@ func (r *ReconcileFunction) Reconcile(request reconcile.Request) (reconcile.Resu
 	fnConfigNamespace := "default"
 	fnConfigNameEnv := os.Getenv("CONTROLLER_CONFIGMAP")
 	fnConfigNamespaceEnv := os.Getenv("CONTROLLER_CONFIGMAP_NS")
+
 	if len(fnConfigNameEnv) > 0 {
 		fnConfigName = fnConfigNameEnv
 	}
+
 	if len(fnConfigNamespaceEnv) > 0 {
 		fnConfigNamespace = fnConfigNamespaceEnv
 	}
@@ -113,7 +115,7 @@ func (r *ReconcileFunction) Reconcile(request reconcile.Request) (reconcile.Resu
 	err := r.Get(context.TODO(), types.NamespacedName{Name: fnConfigName, Namespace: fnConfigNamespace}, fnConfig)
 
 	if err != nil {
-		log.Info("Unable to read Function controller config: %v from Namespace: %v", fnConfigName, fnConfigNamespace)
+		log.Error(err, "Unable to read Function controller config: %v from Namespace: %v", fnConfigName, fnConfigNamespace)
 		return reconcile.Result{}, err
 	}
 
@@ -176,12 +178,16 @@ func (r *ReconcileFunction) Reconcile(request reconcile.Request) (reconcile.Resu
 			return reconcile.Result{}, err
 		}
 	}
-
-	// Managing a resource of type Service.serving.knative.dev
+	err = r.Get(context.TODO(), types.NamespacedName{Name: deployCm.Name, Namespace: deployCm.Namespace}, foundCm)
+	if err != nil {
+		log.Error(err, "namespace", deployCm.Namespace, "name", deployCm.Name)
+	}
+	hash := sha256.New()
+	hash.Write([]byte(foundCm.Data["handler.js"] + foundCm.Data["package.json"]))
+	functionSha := fmt.Sprintf("%x", hash.Sum(nil))
 
 	dockerRegistry := rnInfo.RegistryInfo
-	randomStr := uuid.NewRandom().String()[:8]
-	imageName := fmt.Sprintf("%s/%s-%s:%s", dockerRegistry, fn.Namespace, fn.Name, randomStr)
+	imageName := fmt.Sprintf("%s/%s-%s:%s", dockerRegistry, fn.Namespace, fn.Name, functionSha)
 	deployService := &servingv1alpha1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels:    fn.Labels,
@@ -207,7 +213,8 @@ func (r *ReconcileFunction) Reconcile(request reconcile.Request) (reconcile.Resu
 		fmt.Printf("Error while creating: %v", err)
 		return reconcile.Result{}, err
 	}
-	if !reflect.DeepEqual(deployService.Spec, deployService.Spec) {
+
+	if !reflect.DeepEqual(deployService.Spec, foundService.Spec) {
 		foundService.Spec = deployService.Spec
 		log.Info("Updating Service", "namespace", deployService.Namespace, "name", deployService.Name)
 		err = r.Update(context.TODO(), foundService)
