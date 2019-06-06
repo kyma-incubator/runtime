@@ -19,6 +19,8 @@ spec:
   scope: Namespaced
   version: v1alpha1
 status:
+  conditions: []
+  storedVersions: []
   acceptedNames:
     categories:
     - all

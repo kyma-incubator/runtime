@@ -23,22 +23,15 @@ run: generate fmt vet
 install: 
 	kubectl apply -f config/crds/runtime_v1alpha1_function.yaml
 
-# CreateResource creates a resource in the cluster
-create-resource:
-	kubectl apply -f config/samples
-
-# DeleteResource creates a resource in the cluster
-delete-resource:
-	kubectl delete -f config/samples
-
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
-# deploy: manifests
-# 	kubectl apply -f config/crds
-# 	kustomize build config/default | kubectl apply -f -
+deploy: manifests
+	kubectl apply -f config/crds
+	kustomize build config/default | kubectl apply -f -
+	kubectl apply -f config/config.yaml
 
 # Generate manifests e.g. CRD, RBAC etc.
-# manifests:
-	# go run vendor/sigs.k8s.io/controller-tools/cmd/controller-gen/main.go all
+manifests:
+	go run vendor/sigs.k8s.io/controller-tools/cmd/controller-gen/main.go all
 
 # Run go fmt against code
 fmt:

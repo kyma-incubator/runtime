@@ -1,12 +1,7 @@
----
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: manager-role
----
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
+  creationTimestamp: null
   name: manager-role
 rules:
 - apiGroups:
@@ -86,45 +81,40 @@ rules:
   - list
   - update
   - patch
+- apiGroups:
+  - admissionregistration.k8s.io
+  resources:
+  - mutatingwebhookconfigurations
+  - validatingwebhookconfigurations
+  verbs:
+  - get
+  - list
   - watch
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: manager-rolebinding
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: manager-role
-subjects:
-- kind: ServiceAccount
-  name: manager-role
-  namespace: default
----
-apiVersion: apps/v1
-kind: StatefulSet
-metadata:
-  name: controller-manager
-spec:
-  selector:
-    matchLabels:
-      app: runtime-controller
-  serviceName: runtime
-  template:
-    metadata:
-      labels:
-        app: runtime-controller
-    spec:
-      serviceAccount: manager-role
-      containers:
-      # Change the value of image field below to your controller image URL
-      - image: runtime-controller
-        imagePullPolicy: IfNotPresent
-        name: manager-role
-        env: 
-        - name: CONTROLLER_CONFIGMAP
-          value: "controller-config"
-        - name: CONTROLLER_CONFIGMAP_NS
-          value: "kyma-system"
-
-
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - ""
+  resources:
+  - services
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete

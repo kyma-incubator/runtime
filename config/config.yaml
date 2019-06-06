@@ -63,11 +63,12 @@ data:
   username: 
   # password for the account
   # echo -n $PASSWORD | base64 
-  password: 
+  password:
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: runtime-controller
+  namespace: runtime-system
 secrets:
 - name: docker-reg-credential
