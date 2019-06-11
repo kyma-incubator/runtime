@@ -56,7 +56,7 @@ modify `config/config.yaml` to include your docker.io credentials (base64 encode
 
 ### Local Deployment
 
-#### Manager running locally`
+#### Manager running locally
 
 Install the CRD to a local Kubernetes cluster:
 
