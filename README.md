@@ -1,16 +1,18 @@
 # Runtime
 
-### Development
+## Development
 
-#### Test
+### Test
 
-```
+```bash
 make test
 ```
+
 ### Setup development environment (mac)
 
 start a beefy minikube
-```@sh
+
+```bash
 minikube start \
   --memory=12288 \
   --cpus=4 \
@@ -21,7 +23,8 @@ minikube start \
 ```
 
 install istio
-```
+
+```bash
 kubectl apply \
   --filename https://raw.githubusercontent.com/knative/serving/v0.5.2/third_party/istio-1.0.7/istio-crds.yaml &&
 curl -L https://raw.githubusercontent.com/knative/serving/v0.5.2/third_party/istio-1.0.7/istio.yaml \
@@ -30,7 +33,8 @@ curl -L https://raw.githubusercontent.com/knative/serving/v0.5.2/third_party/ist
 ```
 
 install knative
-```
+
+```bash
 kubectl apply \
   --selector knative.dev/crd-install=true \
   --filename https://github.com/knative/serving/releases/download/v0.5.2/serving.yaml \
@@ -40,47 +44,61 @@ kubectl apply \
 ```
 
 install knative part2
-```
+
+```bash
 kubectl apply --filename https://github.com/knative/serving/releases/download/v0.5.2/serving.yaml \
 --filename https://github.com/knative/build/releases/download/v0.5.0/build.yaml \
 --filename https://github.com/knative/serving/releases/download/v0.5.2/monitoring.yaml \
 --filename https://raw.githubusercontent.com/knative/serving/v0.5.2/third_party/config/build/clusterrole.yaml
 ```
 
-modify config/samples/config.yaml to include your docker.io credentials (base64 encoded) and update the dockerregistry value to your docker.io username
+modify `config/config.yaml` to include your docker.io credentials (base64 encoded) and update the dockerregistry value to your docker.io username
 
-apply the configuration
+### Local Deployment
 
-`kubectl apply -f config/samples/config.yaml`
+#### Manager running locally
 
-#### Install the CRD to a local Kubernetes cluster
+Install the CRD to a local Kubernetes cluster:
 
-```
+```bash
 make install
 ```
-#### Build and run the manager
-```
+
+Run the controller on your machine:
+
+```bash
 make run
 ```
 
-# Create a docker image
+#### Manager running inside k8s cluster
 
-```
-make docker-build IMG=<img-name>
-```
-
-# Push the docker image to a configured container registry
-
-```
-make docker-push IMG=<img-name>
+```bash
+eval $(minikube docker-env)
+make docker-build
+make install
+make deploy
 ```
 
-#### Run the examples
+### Prod Deployment
+
+Uncomment `manager_image_patch_dev` in `kustomization.yaml`
+Then run the following commands:
+
+```bash
+make install
+make docker-build
+make docker-push
+make deploy
 ```
+
+### Run the examples
+
+```bash
 kubectl apply -f config/samples/runtime_v1alpha1_function.yaml
 ```
 
 access the function
-```
+
+```bash
 curl -v -H "Host: $(kubectl get ksvc sample --no-headers | awk '{print $2}')" http://$(minikube ip):$(kubectl get svc istio-ingressgateway --namespace istio-system --output 'jsonpath={.spec.ports[?(@.port==80)].nodePort}')
 ```

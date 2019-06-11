@@ -10,9 +10,6 @@ spec:
   names:
     kind: Function
     plural: functions
-    singular: function
-    shortNames:
-    - fn
   scope: Namespaced
   validation:
     openAPIV3Schema:
@@ -44,8 +41,8 @@ spec:
               description: function defines the content of a function
               type: string
             functionContentType:
-              description: functionContentType defines file content type (plaintext/
-                base64)
+              description: functionContentType defines file content type (plaintext
+                or base64)
               type: string
             runtime:
               description: runtime is the programming language used for a function

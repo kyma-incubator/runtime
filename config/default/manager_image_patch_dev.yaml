@@ -13,3 +13,9 @@ spec:
         app: runtime-controller
     spec:
       serviceAccount: runtime-controller
+      containers:
+      - command:
+        - /manager
+        # this is required to use the local minikube built image
+        imagePullPolicy: Never
+        name: manager
