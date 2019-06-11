@@ -52,15 +52,11 @@ kubectl apply --filename https://github.com/knative/serving/releases/download/v0
 --filename https://raw.githubusercontent.com/knative/serving/v0.5.2/third_party/config/build/clusterrole.yaml
 ```
 
-modify config/samples/config.yaml to include your docker.io credentials (base64 encoded) and update the dockerregistry value to your docker.io username
-
-apply the configuration
-
-`kubectl apply -f config/samples/config.yaml`
+modify `config/config.yaml` to include your docker.io credentials (base64 encoded) and update the dockerregistry value to your docker.io username
 
 ### Local Deployment
 
-#### Manager running locally
+#### Manager running locally`
 
 Install the CRD to a local Kubernetes cluster:
 
@@ -78,8 +74,7 @@ make run
 
 ```bash
 eval $(minikube docker-env)
-make docker-build IMG=controller
-
+make docker-build
 make install
 make deploy
 ```
@@ -91,8 +86,8 @@ Then run the following commands:
 
 ```bash
 make install
-make docker-build IMG=
-make docker-push IMG=
+make docker-build
+make docker-push
 make deploy
 ```
 
