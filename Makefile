@@ -15,6 +15,7 @@ qt:
 manager: generate fmt vet
 	go build -o bin/manager github.com/kyma-incubator/function-controller/cmd/manager
 
+# NOTE: does not work anymore until https://github.com/kubernetes-sigs/kubebuilder/issues/400 is implemented
 # Run against the configured Kubernetes cluster in ~/.kube/config
 run: generate fmt vet
 	go run ./cmd/manager/main.go
@@ -51,10 +52,10 @@ dep:
 # Build the docker image
 # docker-build: test
 .PHONY: docker-build
-docker-build:
+docker-build: dep fmt
 	docker build . -t ${IMG}
 	@echo "updating kustomize image patch file for manager resource"
-	sed -i'' -e 's@image: .*@image: '"${IMG}"'@' ./config/default/manager_image_patch.yaml
+	sed -i'' -e 's@image: .*@image: '"${IMG}"'@' ./config/default/manager_image_patch_remote_dev.yaml ./config/default/manager_image_patch_local_dev.yaml
 
 # Push the docker image
 .PHONY: docker-push

@@ -17,12 +17,14 @@ limitations under the License.
 package function
 
 import (
+	"fmt"
 	stdlog "log"
 	"os"
 	"path/filepath"
 	"sync"
 	"testing"
 
+	buildv1alpha1 "github.com/knative/build/pkg/apis/build/v1alpha1"
 	servingv1alpha1 "github.com/knative/serving/pkg/apis/serving/v1alpha1"
 	"github.com/kyma-incubator/runtime/pkg/apis"
 	"github.com/onsi/gomega"
@@ -31,6 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 )
 
 var cfg *rest.Config
@@ -40,9 +43,18 @@ func TestMain(m *testing.M) {
 		Config:            cfg,
 		CRDDirectoryPaths: []string{filepath.Join("..", "..", "..", "config", "crds")},
 	}
+
+	logf.SetLogger(logf.ZapLogger(false))
 	apis.AddToScheme(scheme.Scheme)
 
-	servingv1alpha1.SchemeBuilder.AddToScheme(scheme.Scheme)
+	if err := servingv1alpha1.SchemeBuilder.AddToScheme(scheme.Scheme); err != nil {
+		log.Error(err, "unable add serving APIs to scheme")
+		os.Exit(1)
+	}
+	if err := buildv1alpha1.AddToScheme(scheme.Scheme); err != nil {
+		log.Error(err, "unable add Build APIs to scheme")
+		os.Exit(1)
+	}
 
 	var err error
 	if cfg, err = t.Start(); err != nil {
@@ -55,27 +67,32 @@ func TestMain(m *testing.M) {
 }
 
 // SetupTestReconcile returns a reconcile.Reconcile implementation that delegates to inner and
-// writes the request to requests after Reconcile is finished.
-func SetupTestReconcile(inner reconcile.Reconciler) (reconcile.Reconciler, chan reconcile.Request) {
+// writes the request to requests after Reconcile is finished. If the reconcile function encounters any error, it is written to the errors channel
+func SetupTestReconcile(inner reconcile.Reconciler) (reconcile.Reconciler, chan reconcile.Request, chan error) {
 
 	requests := make(chan reconcile.Request)
+	errors := make(chan error)
 
 	fn := reconcile.Func(func(req reconcile.Request) (reconcile.Result, error) {
 		result, err := inner.Reconcile(req)
+		if err != nil {
+			fmt.Printf("Reconciler encountered error: %v", err)
+			errors <- err
+		}
 		requests <- req
 		return result, err
 	})
-	return fn, requests
+	return fn, requests, errors
 }
 
 // StartTestManager adds recFn
 func StartTestManager(mgr manager.Manager, g *gomega.GomegaWithT) (chan struct{}, *sync.WaitGroup) {
 	stop := make(chan struct{})
 	wg := &sync.WaitGroup{}
+	wg.Add(1)
 	go func() {
-		wg.Add(1)
+		defer wg.Done()
 		g.Expect(mgr.Start(stop)).NotTo(gomega.HaveOccurred())
-		wg.Done()
 	}()
 	return stop, wg
 }

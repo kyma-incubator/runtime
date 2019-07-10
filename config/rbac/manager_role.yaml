@@ -7,6 +7,18 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - pods
+  verbs:
+  - get
+  - list
+  - watch
+  - create
+  - update
+  - patch
+  - delete
+- apiGroups:
+  - ""
+  resources:
   - configmaps
   verbs:
   - get
@@ -53,6 +65,9 @@ rules:
   - serving.knative.dev
   resources:
   - services
+  - routes
+  - configurations
+  - revisions
   verbs:
   - get
   - list
@@ -62,11 +77,28 @@ rules:
   - patch
   - delete
 - apiGroups:
+  - build.knative.dev
+  resources:
+  - builds
+  - buildtemplates
+  - clusterbuildtemplates
+  - services
+  verbs:
+  - get
+  - list
+  - create
+  - update
+  - delete
+  - patch
+  - watch
+- apiGroups:
   - ""
   resources:
   - serviceaccounts
   verbs:
   - get
+  - watch
+  - update
   - list
 - apiGroups:
   - ""
@@ -77,6 +109,8 @@ rules:
   verbs:
   - create
   - get
+  - watch
+  - update
   - delete
   - list
   - update

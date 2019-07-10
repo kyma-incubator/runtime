@@ -45,8 +45,27 @@ type FunctionSpec struct {
 	Env []v1.EnvVar `json:"env,omitempty"`
 }
 
+// TemplateKind defines the type of BuildTemplate used by the build.
+type FunctionCondition string
+
+const (
+	// Indicates that function has an unknown condition.
+	FunctionConditionUnknown FunctionCondition = "Unknown"
+	// Indicates that function has a running condition.
+	FunctionConditionRunning FunctionCondition = "Running"
+	// Indicates that function has an Building condition. It waits for the Build Pod get the status completed.
+	FunctionConditionBuilding FunctionCondition = "Building"
+	// Indicates that function has an error condition. Either the Knative Build or the Serving failed.
+	FunctionConditionError FunctionCondition = "Error"
+	// Indicates that function has a Deploying condition. The knative service is not is status ready yet.
+	FunctionConditionDeploying FunctionCondition = "Deploying"
+	// Indicates that there is a new image and function is being updated.
+	FunctionConditionUpdating FunctionCondition = "Updating"
+)
+
 // FunctionStatus defines the observed state of Function
 type FunctionStatus struct {
+	Condition FunctionCondition `json:"condition,omitempty"`
 }
 
 // +genclient
@@ -54,6 +73,11 @@ type FunctionStatus struct {
 
 // Function is the Schema for the functions API
 // +k8s:openapi-gen=true
+// +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Size",type="string",JSONPath=".spec.size",description="Size defines as the size of a function pertaining to memory and cpu only. Values can be any one of these S M L XL)"
+// +kubebuilder:printcolumn:name="Runtime",type="string",JSONPath=".spec.runtime",description="Runtime is the programming language used for a function e.g. nodejs8"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
+// +kubebuilder:printcolumn:name="Status",type="string",JSONPath=".status.condition",description="Check if the function is ready"
 type Function struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

@@ -98,28 +98,38 @@ curl -L https://raw.githubusercontent.com/knative/serving/v0.5.2/third_party/ist
 install knative
 
 ```bash
-kubectl apply \
-  --selector knative.dev/crd-install=true \
-  --filename https://github.com/knative/serving/releases/download/v0.5.2/serving.yaml \
-  --filename https://github.com/knative/build/releases/download/v0.5.0/build.yaml \
-  --filename https://github.com/knative/serving/releases/download/v0.5.2/monitoring.yaml \
-  --filename https://raw.githubusercontent.com/knative/serving/v0.5.2/third_party/config/build/clusterrole.yaml
+kubectl apply --selector knative.dev/crd-install=true \
+--filename https://github.com/knative/serving/releases/download/v0.6.1/serving.yaml \
+--filename https://github.com/knative/build/releases/download/v0.6.0/build.yaml \
+--filename https://github.com/knative/eventing/releases/download/v0.6.1/release.yaml \
+--filename https://github.com/knative/eventing-sources/releases/download/v0.6.0/eventing-sources.yaml \
+--filename https://github.com/knative/serving/releases/download/v0.6.1/monitoring.yaml \
+--filename https://raw.githubusercontent.com/knative/serving/v0.6.1/third_party/config/build/clusterrole.yaml
+
 ```
 
 install knative part2
 
 ```bash
-kubectl apply --filename https://github.com/knative/serving/releases/download/v0.5.2/serving.yaml \
---filename https://github.com/knative/build/releases/download/v0.5.0/build.yaml \
---filename https://github.com/knative/serving/releases/download/v0.5.2/monitoring.yaml \
---filename https://raw.githubusercontent.com/knative/serving/v0.5.2/third_party/config/build/clusterrole.yaml
+kubectl apply --filename https://github.com/knative/serving/releases/download/v0.6.0/serving.yaml --selector networking.knative.dev/certificate-provider!=cert-manager \
+   --filename https://github.com/knative/build/releases/download/v0.6.0/build.yaml \
+   --filename https://github.com/knative/eventing/releases/download/v0.6.0/release.yaml \
+   --filename https://github.com/knative/eventing-sources/releases/download/v0.6.0/eventing-sources.yaml \
+   --filename https://github.com/knative/serving/releases/download/v0.6.0/monitoring.yaml \
+   --filename https://raw.githubusercontent.com/knative/serving/v0.6.0/third_party/config/build/clusterrole.yaml
 ```
-
-modify `config/config.yaml` to include your docker.io credentials (base64 encoded) and update the dockerregistry value to your docker.io username
 
 ### Local Deployment
 
 #### Manager running locally
+
+modify config/config.yaml to include your docker.io credentials (base64 encoded) and update the docker registry value to your docker.io username
+
+Apply the configuration
+
+```bash
+kubectl apply -f config/config.yaml
+```
 
 Install the CRD to a local Kubernetes cluster:
 
@@ -151,19 +161,34 @@ Then run the following commands:
 
 ```bash
 make install
-make docker-build
-make docker-push
+make docker-push IMG=<e.g. index.docker.io/nachtmaar/runtime-controller>
 make deploy
 ```
 
 ### Run the examples
 
+Create sample function
+
 ```bash
-kubectl apply -f config/samples/runtime_v1alpha1_function.yaml
+kubectl apply -f config/samples/runtime_v1alpha1_function.yaml -n {NAMESPACE}
+```
+
+search for function
+
+```bash
+kubectl get functions -n {NAMESPACE}
+```
+
+```bash
+kubectl get function -n {NAMESPACE}
+```
+
+```bash
+kubectl get fcn -n {NAMESPACE}
 ```
 
 access the function
 
 ```bash
-curl -v -H "Host: $(kubectl get ksvc sample --no-headers | awk '{print $2}')" http://$(minikube ip):$(kubectl get svc istio-ingressgateway --namespace istio-system --output 'jsonpath={.spec.ports[?(@.port==80)].nodePort}')
+	curl -v -H "Host: $(kubectl get ksvc sample --output 'jsonpath={.status.domain}' -n {NAMESPACE}" http://$(minikube ip):$(kubectl get svc istio-ingressgateway --namespace istio-system --output 'jsonpath={.spec.ports[?(@.port==80)].nodePort}')
 ```

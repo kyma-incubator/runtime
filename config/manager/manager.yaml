@@ -44,7 +44,7 @@ spec:
       containers:
       - command:
         - /manager
-        image: runtime-controller:latest
+        image: ""
         imagePullPolicy: Always
         name: manager
         env:
@@ -54,6 +54,12 @@ spec:
                 fieldPath: metadata.namespace
           - name: SECRET_NAME
             value: $(WEBHOOK_SECRET_NAME)
+          - name: CONTROLLER_CONFIGMAP_NS
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          - name: BUILD_TIMEOUT
+            value: "20"
         resources:
           limits:
             cpu: 100m
