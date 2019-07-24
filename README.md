@@ -1,3 +1,5 @@
+> [Deprecated: It has been migrated to Kyma](https://github.com/kyma-project/kyma/tree/master/components)
+
 # Runtime
 
 ## Requirements & Scaffolding
